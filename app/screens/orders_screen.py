@@ -5,13 +5,14 @@ import flet as ft
 
 import db
 import pricing
+from app import theme
 
 FILTERS = [("active", "Активные"), ("unpaid", "Неоплаченные"), ("done", "Завершённые"), ("all", "Все")]
 
 
 class OrdersScreen(ft.Column):
     def __init__(self, on_open_order: Callable[[int], None]):
-        super().__init__(expand=True, spacing=10)
+        super().__init__(expand=True, spacing=theme.SPACING)
         self.on_open_order = on_open_order
         self.kind = "active"
         self.search_text = ""
@@ -25,9 +26,12 @@ class OrdersScreen(ft.Column):
             label="Поиск по клиенту / контакту / описанию",
             on_change=self._on_search_change,
         )
-        self.list_view = ft.ListView(expand=True, spacing=6)
+        self.list_view = ft.ListView(expand=True, spacing=theme.SPACING)
 
-        self.controls = [self.tabs, self.search_field, self.list_view]
+        self.controls = [
+            theme.card(ft.Column([self.tabs, self.search_field], spacing=theme.SPACING)),
+            self.list_view,
+        ]
         self._render()
 
     def _on_filter_change(self, e: ft.ControlEvent) -> None:
@@ -57,8 +61,11 @@ class OrdersScreen(ft.Column):
             subtitle += " · не оплачен"
         if mark:
             subtitle += f" · {mark}"
-        return ft.ListTile(
-            title=ft.Text(f"#{o['id']} {o['client']}"),
-            subtitle=ft.Text(subtitle),
-            on_click=lambda e, oid=o["id"]: self.on_open_order(oid),
+        return theme.card(
+            ft.ListTile(
+                title=ft.Text(f"#{o['id']} {o['client']}"),
+                subtitle=ft.Text(subtitle),
+                on_click=lambda e, oid=o["id"]: self.on_open_order(oid),
+            ),
+            padding=0,
         )
