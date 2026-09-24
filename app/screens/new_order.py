@@ -1,0 +1,129 @@
+"""Экран «Новый заказ»: форма создания без необходимости в Telegram."""
+import shutil
+from pathlib import Path
+from typing import Callable
+
+import flet as ft
+
+import db
+import pricing
+
+LOCAL_STORAGE = Path(__file__).resolve().parent.parent / "files_storage"
+
+
+class NewOrderScreen(ft.Column):
+    def __init__(self, on_created: Callable[[int], None]):
+        super().__init__(expand=True, spacing=10)
+        self.on_created = on_created
+        self._picked_files: list = []
+
+        self.client_field = ft.TextField(label="Клиент *")
+        self.contact_field = ft.TextField(label="Контакт")
+        self.description_field = ft.TextField(label="Описание", multiline=True)
+        self.material_dd = ft.Dropdown(label="Материал", on_change=self._recalc)
+        self.color_field = ft.TextField(label="Цвет")
+        self.weight_field = ft.TextField(label="Вес, г", value="0", on_change=self._recalc)
+        self.hours_field = ft.TextField(label="Часы печати", value="0", on_change=self._recalc)
+        self.qty_field = ft.TextField(label="Кол-во", value="1", on_change=self._recalc)
+        self.deadline_field = ft.TextField(label="Срок (сегодня / завтра / 25.09)")
+        self.reverse_checkbox = ft.Checkbox(label="Реверс-моделирование (нет STL)", on_change=self._recalc)
+        self.price_preview = ft.Text()
+        self.custom_price_field = ft.TextField(label="Своя цена (необязательно)")
+        self.files_text = ft.Text("Файлы не выбраны.")
+        self.file_picker = ft.FilePicker(on_result=self._on_file_picked)
+        self.error_text = ft.Text("", color=ft.Colors.RED)
+
+        self.controls = [
+            ft.Text("Новый заказ", size=20, weight=ft.FontWeight.BOLD),
+            ft.Row([self.client_field, self.contact_field]),
+            self.description_field,
+            ft.Row([self.material_dd, self.color_field]),
+            ft.Row([self.weight_field, self.hours_field, self.qty_field]),
+            ft.Row([self.deadline_field, self.reverse_checkbox]),
+            self.price_preview,
+            self.custom_price_field,
+            ft.Row([ft.ElevatedButton("Прикрепить файлы", icon=ft.Icons.UPLOAD_FILE,
+                                       on_click=lambda e: self.file_picker.pick_files(allow_multiple=True)),
+                    self.files_text]),
+            self.error_text,
+            ft.ElevatedButton("Создать заказ", icon=ft.Icons.ADD, on_click=self._on_save),
+        ]
+
+    def did_mount(self) -> None:
+        self.page.overlay.append(self.file_picker)
+        settings = db.get_settings()
+        self.material_dd.options = [ft.dropdown.Option(m) for m in settings["materials"]]
+        self.page.update()
+        self._recalc(None)
+
+    def _on_file_picked(self, e: ft.FilePickerResultEvent) -> None:
+        self._picked_files = list(e.files or [])
+        self.files_text.value = ", ".join(f.name for f in self._picked_files) or "Файлы не выбраны."
+        self.update()
+
+    def _recalc(self, e: ft.ControlEvent | None) -> None:
+        weight = pricing.parse_number(self.weight_field.value) or 0
+        hours = pricing.parse_number(self.hours_field.value) or 0
+        qty = int(pricing.parse_number(self.qty_field.value) or 1)
+        result = pricing.calc_price(
+            self.material_dd.value, weight, hours, qty, bool(self.reverse_checkbox.value)
+        )
+        self.price_preview.value = f"Расчётная цена: {pricing.money(result['price'])}"
+        if self.page:
+            self.update()
+
+    def _on_save(self, e: ft.ControlEvent) -> None:
+        if not (self.client_field.value or "").strip():
+            self.error_text.value = "Укажите клиента."
+            self.update()
+            return
+
+        weight = pricing.parse_number(self.weight_field.value) or 0
+        hours = pricing.parse_number(self.hours_field.value) or 0
+        qty = int(pricing.parse_number(self.qty_field.value) or 1)
+        reverse = bool(self.reverse_checkbox.value)
+        calc = pricing.calc_price(self.material_dd.value, weight, hours, qty, reverse)
+        custom_price = pricing.parse_number(self.custom_price_field.value)
+        price = custom_price if custom_price is not None else calc["price"]
+
+        order_id = db.add_order({
+            "client": self.client_field.value.strip(),
+            "contact": self.contact_field.value or "",
+            "description": self.description_field.value or "",
+            "material": self.material_dd.value,
+            "color": self.color_field.value or "",
+            "weight_g": weight,
+            "print_hours": hours,
+            "qty": qty,
+            "deadline": pricing.parse_date(self.deadline_field.value),
+            "cost": round(calc["cost"], 2),
+            "price": price,
+            "notes": "",
+            "reverse_engineering": 1 if reverse else 0,
+        })
+
+        dest_dir = LOCAL_STORAGE / str(order_id)
+        for f in self._picked_files:
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest = dest_dir / f.name
+            shutil.copy(f.path, dest)
+            db.add_attachment(order_id, "local", local_path=str(dest), filename=f.name, file_type="document")
+
+        self._reset_form()
+        self.on_created(order_id)
+
+    def _reset_form(self) -> None:
+        self.client_field.value = ""
+        self.contact_field.value = ""
+        self.description_field.value = ""
+        self.color_field.value = ""
+        self.weight_field.value = "0"
+        self.hours_field.value = "0"
+        self.qty_field.value = "1"
+        self.deadline_field.value = ""
+        self.reverse_checkbox.value = False
+        self.custom_price_field.value = ""
+        self.error_text.value = ""
+        self._picked_files = []
+        self.files_text.value = "Файлы не выбраны."
+        self._recalc(None)
