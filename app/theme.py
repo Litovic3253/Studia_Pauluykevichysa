@@ -8,8 +8,26 @@ BUTTON_RADIUS = 12
 SPACING = 16
 PAGE_PADDING = 24
 
-LIGHT_THEME = ft.Theme(color_scheme_seed=ACCENT_COLOR, use_material3=True)
-DARK_THEME = ft.Theme(color_scheme_seed=ACCENT_COLOR, use_material3=True)
+
+def _button_shape() -> ft.RoundedRectangleBorder:
+    return ft.RoundedRectangleBorder(radius=BUTTON_RADIUS)
+
+
+def _rounded_button_themes() -> dict:
+    """Общие скруглённые темы кнопок — применяются и к светлой, и к тёмной теме,
+    чтобы BUTTON_RADIUS действовал на все ElevatedButton/OutlinedButton/TextButton/IconButton
+    без изменений в экранах."""
+    return dict(
+        elevated_button_theme=ft.ElevatedButtonTheme(shape=_button_shape()),
+        outlined_button_theme=ft.OutlinedButtonTheme(shape=_button_shape()),
+        text_button_theme=ft.TextButtonTheme(shape=_button_shape()),
+        filled_button_theme=ft.FilledButtonTheme(shape=_button_shape()),
+        icon_button_theme=ft.IconButtonTheme(shape=_button_shape()),
+    )
+
+
+LIGHT_THEME = ft.Theme(color_scheme_seed=ACCENT_COLOR, use_material3=True, **_rounded_button_themes())
+DARK_THEME = ft.Theme(color_scheme_seed=ACCENT_COLOR, use_material3=True, **_rounded_button_themes())
 
 THEME_MODE_CYCLE = ["system", "light", "dark"]
 
