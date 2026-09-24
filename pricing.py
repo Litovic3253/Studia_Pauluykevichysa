@@ -55,7 +55,7 @@ def parse_date(text: str | None) -> str | None:
         d = date(year, month, day)
     except ValueError:
         return None
-    if not m[3] and d < today:
+    if not m[3] and d < today:  # без года и дата прошла — значит следующий год
         d = d.replace(year=year + 1)
     return d.isoformat()
 
