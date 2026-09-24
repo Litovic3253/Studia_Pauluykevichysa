@@ -3,20 +3,22 @@ import flet as ft
 
 import db
 import pricing
+from app import theme
 
 
 class CustomersScreen(ft.Column):
     def __init__(self):
-        super().__init__(expand=True, spacing=10)
+        super().__init__(expand=True, spacing=theme.SPACING)
         self.search_text = ""
         self.selected_customer_id: int | None = None
         self._notes_field: ft.TextField | None = None
 
         self.search_field = ft.TextField(label="Поиск клиента", on_change=self._on_search)
-        self.list_view = ft.ListView(expand=True, spacing=6)
-        self.detail_column = ft.Column(visible=False, spacing=8)
+        self.list_view = ft.ListView(expand=True, spacing=theme.SPACING)
+        self.detail_column = ft.Column(spacing=8)
+        self.detail_card = theme.card(self.detail_column, visible=False)
 
-        self.controls = [self.search_field, self.list_view, self.detail_column]
+        self.controls = [theme.card(self.search_field), self.list_view, self.detail_card]
         self.refresh()
 
     def _on_search(self, e: ft.ControlEvent) -> None:
@@ -37,10 +39,13 @@ class CustomersScreen(ft.Column):
         subtitle = f"{c['orders_count']} заказ(ов) · оплачено {pricing.money(c['paid_total'])}"
         if c["debt_total"]:
             subtitle += f" · долг {pricing.money(c['debt_total'])}"
-        return ft.ListTile(
-            title=ft.Text(c["name"]),
-            subtitle=ft.Text(subtitle),
-            on_click=lambda e, cid=c["id"]: self._open_customer(cid),
+        return theme.card(
+            ft.ListTile(
+                title=ft.Text(c["name"]),
+                subtitle=ft.Text(subtitle),
+                on_click=lambda e, cid=c["id"]: self._open_customer(cid),
+            ),
+            padding=0,
         )
 
     def _open_customer(self, customer_id: int) -> None:
@@ -51,7 +56,7 @@ class CustomersScreen(ft.Column):
     def _render_detail(self, customer_id: int, from_sync: bool = False) -> None:
         customer = db.get_customer(customer_id)
         if not customer:
-            self.detail_column.visible = False
+            self.detail_card.visible = False
             self.selected_customer_id = None
             return
         if from_sync and self.detail_column.controls:
@@ -70,7 +75,7 @@ class CustomersScreen(ft.Column):
             for o in orders
         ] or [ft.Text("Заказов пока нет.", italic=True)]
 
-        self.detail_column.visible = True
+        self.detail_card.visible = True
         self.detail_column.controls = [
             ft.Text(customer["name"], size=18, weight=ft.FontWeight.BOLD),
             ft.Text(f"Контакт: {customer['contact'] or '—'}"),
