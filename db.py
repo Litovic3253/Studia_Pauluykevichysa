@@ -81,6 +81,18 @@ def init() -> None:
         )
         if "customer_id" not in cols:
             c.execute("ALTER TABLE orders ADD COLUMN customer_id INTEGER REFERENCES customers(id)")
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS attachments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id INTEGER NOT NULL REFERENCES orders(id),
+                source TEXT NOT NULL,
+                file_id TEXT,
+                local_path TEXT,
+                filename TEXT,
+                file_type TEXT,
+                added_at TEXT NOT NULL
+            )"""
+        )
         c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
         for key, value in DEFAULT_SETTINGS.items():
             c.execute(
@@ -89,6 +101,7 @@ def init() -> None:
             )
         _migrate_pricing_v2(c)
         _migrate_customers_v1(c)
+        _migrate_attachments_v1(c)
 
 
 def _migrate_pricing_v2(c) -> None:
@@ -131,6 +144,22 @@ def _migrate_customers_v1(c) -> None:
             [(customer_id, oid) for oid in order_ids],
         )
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('customers_v1', 'true')")
+
+
+def _migrate_attachments_v1(c) -> None:
+    """Разовый перенос старого orders.file_id в таблицу attachments."""
+    if c.execute("SELECT 1 FROM settings WHERE key = 'attachments_v1'").fetchone():
+        return
+    now = datetime.now().isoformat(timespec="seconds")
+    for row in c.execute(
+        "SELECT id, file_id, file_type FROM orders WHERE file_id IS NOT NULL AND file_id != ''"
+    ):
+        c.execute(
+            "INSERT INTO attachments (order_id, source, file_id, filename, file_type, added_at) "
+            "VALUES (?, 'telegram', ?, NULL, ?, ?)",
+            (row["id"], row["file_id"], row["file_type"], now),
+        )
+    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('attachments_v1', 'true')")
 
 
 # ---------- настройки ----------
@@ -315,3 +344,50 @@ def stats() -> dict:
         "month_revenue": month_row["revenue"],
         "materials": [(m["material"], m["grams"]) for m in materials],
     }
+
+
+# ---------- вложения ----------
+
+def add_attachment(order_id: int, source: str, *, file_id: str | None = None,
+                    local_path: str | None = None, filename: str | None = None,
+                    file_type: str | None = None) -> int:
+    with _conn() as c:
+        cur = c.execute(
+            "INSERT INTO attachments (order_id, source, file_id, local_path, filename, file_type, added_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (order_id, source, file_id, local_path, filename, file_type,
+             datetime.now().isoformat(timespec="seconds")),
+        )
+        return cur.lastrowid
+
+
+def list_attachments(order_id: int):
+    with _conn() as c:
+        return c.execute(
+            "SELECT * FROM attachments WHERE order_id = ? ORDER BY id", (order_id,)
+        ).fetchall()
+
+
+def get_attachment(attachment_id: int):
+    with _conn() as c:
+        return c.execute("SELECT * FROM attachments WHERE id = ?", (attachment_id,)).fetchone()
+
+
+def delete_attachment(attachment_id: int) -> None:
+    with _conn() as c:
+        c.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
+
+
+# ---------- отпечаток состояния (для live-обновления) ----------
+
+def change_fingerprint() -> tuple:
+    """Лёгкий отпечаток состояния БД: меняется при любом изменении заказов/клиентов/вложений."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT "
+            "(SELECT COUNT(*) FROM orders) AS orders_count, "
+            "(SELECT COALESCE(MAX(id), 0) FROM orders) AS max_order_id, "
+            "(SELECT COUNT(*) FROM customers) AS customers_count, "
+            "(SELECT COUNT(*) FROM attachments) AS attachments_count"
+        ).fetchone()
+    return (row["orders_count"], row["max_order_id"], row["customers_count"], row["attachments_count"])
