@@ -61,9 +61,9 @@ def main(page: ft.Page) -> None:
 
     def go_to_orders_after_create(order_id: int) -> None:
         content.content = orders_section
-        orders_section._open_order(order_id)
         nav_rail.selected_index = 0
         page.update()
+        orders_section._open_order(order_id)
 
     new_order_screen = NewOrderScreen(on_created=go_to_orders_after_create)
 
@@ -90,6 +90,7 @@ def main(page: ft.Page) -> None:
     def on_db_changed() -> None:
         orders_section.refresh()
         customers_screen.refresh()
+        prices_screen.refresh()
         stats_screen.refresh()
 
     page.pubsub.subscribe(lambda _: on_db_changed())
