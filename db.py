@@ -70,6 +70,9 @@ def init() -> None:
         cols = {r["name"] for r in c.execute("PRAGMA table_info(orders)")}
         if "reverse_engineering" not in cols:
             c.execute("ALTER TABLE orders ADD COLUMN reverse_engineering INTEGER DEFAULT 0")
+        if "updated_at" not in cols:
+            c.execute("ALTER TABLE orders ADD COLUMN updated_at TEXT")
+            c.execute("UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL")
         c.execute(
             """CREATE TABLE IF NOT EXISTS customers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -253,10 +256,11 @@ def add_order(data: dict) -> int:
         data["customer_id"] = find_or_create_customer(data["client"], data.get("contact"))
     values = [data.get(f) for f in fields]
     with _conn() as c:
+        now = datetime.now().isoformat(timespec="seconds")
         cur = c.execute(
-            f"INSERT INTO orders (created_at, {', '.join(fields)}) "
-            f"VALUES (?, {', '.join('?' * len(fields))})",
-            [datetime.now().isoformat(timespec="seconds"), *values],
+            f"INSERT INTO orders (created_at, updated_at, {', '.join(fields)}) "
+            f"VALUES (?, ?, {', '.join('?' * len(fields))})",
+            [now, now, *values],
         )
         return cur.lastrowid
 
@@ -269,6 +273,9 @@ def get_order(order_id: int):
 def update_order(order_id: int, **fields) -> None:
     if not fields:
         return
+    # Полное разрешение (с микросекундами), чтобы обновление сразу после создания
+    # заказа (в течение той же секунды) тоже меняло change_fingerprint().
+    fields = {**fields, "updated_at": datetime.now().isoformat()}
     sets = ", ".join(f"{k} = ?" for k in fields)
     with _conn() as c:
         c.execute(f"UPDATE orders SET {sets} WHERE id = ?", [*fields.values(), order_id])
@@ -387,7 +394,11 @@ def change_fingerprint() -> tuple:
             "SELECT "
             "(SELECT COUNT(*) FROM orders) AS orders_count, "
             "(SELECT COALESCE(MAX(id), 0) FROM orders) AS max_order_id, "
+            "(SELECT COALESCE(MAX(updated_at), '') FROM orders) AS max_updated_at, "
             "(SELECT COUNT(*) FROM customers) AS customers_count, "
             "(SELECT COUNT(*) FROM attachments) AS attachments_count"
         ).fetchone()
-    return (row["orders_count"], row["max_order_id"], row["customers_count"], row["attachments_count"])
+    return (
+        row["orders_count"], row["max_order_id"], row["max_updated_at"],
+        row["customers_count"], row["attachments_count"],
+    )

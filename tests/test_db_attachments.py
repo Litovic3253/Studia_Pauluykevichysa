@@ -63,3 +63,11 @@ def test_change_fingerprint_changes_on_new_attachment(temp_db):
     db.add_attachment(order_id, "local", local_path="x", filename="x", file_type="document")
     after = db.change_fingerprint()
     assert before != after
+
+
+def test_change_fingerprint_changes_on_order_update(temp_db):
+    order_id = db.add_order({"client": "К", "contact": "", "cost": 0, "price": 0})
+    before = db.change_fingerprint()
+    db.update_order(order_id, status="printing", paid=1)
+    after = db.change_fingerprint()
+    assert before != after
