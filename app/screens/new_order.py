@@ -7,13 +7,14 @@ import flet as ft
 
 import db
 import pricing
+from app import theme
 
 LOCAL_STORAGE = Path(__file__).resolve().parent.parent / "files_storage"
 
 
 class NewOrderScreen(ft.Column):
     def __init__(self, on_created: Callable[[int], None]):
-        super().__init__(expand=True, spacing=10)
+        super().__init__(expand=True, spacing=theme.SPACING)
         self.on_created = on_created
         self._picked_files: list = []
 
@@ -35,16 +36,20 @@ class NewOrderScreen(ft.Column):
 
         self.controls = [
             ft.Text("Новый заказ", size=20, weight=ft.FontWeight.BOLD),
-            ft.Row([self.client_field, self.contact_field]),
-            self.description_field,
-            ft.Row([self.material_dd, self.color_field]),
-            ft.Row([self.weight_field, self.hours_field, self.qty_field]),
-            ft.Row([self.deadline_field, self.reverse_checkbox]),
-            self.price_preview,
-            self.custom_price_field,
-            ft.Row([ft.ElevatedButton("Прикрепить файлы", icon=ft.Icons.UPLOAD_FILE,
-                                       on_click=lambda e: self.file_picker.pick_files(allow_multiple=True)),
-                    self.files_text]),
+            theme.card(ft.Column([
+                ft.Row([self.client_field, self.contact_field]),
+                self.description_field,
+            ], spacing=theme.SPACING)),
+            theme.card(ft.Column([
+                ft.Row([self.material_dd, self.color_field]),
+                ft.Row([self.weight_field, self.hours_field, self.qty_field]),
+                ft.Row([self.deadline_field, self.reverse_checkbox]),
+                self.price_preview,
+                self.custom_price_field,
+                ft.Row([ft.ElevatedButton("Прикрепить файлы", icon=ft.Icons.UPLOAD_FILE,
+                                           on_click=lambda e: self.file_picker.pick_files(allow_multiple=True)),
+                        self.files_text]),
+            ], spacing=theme.SPACING)),
             self.error_text,
             ft.ElevatedButton("Создать заказ", icon=ft.Icons.ADD, on_click=self._on_save),
         ]
