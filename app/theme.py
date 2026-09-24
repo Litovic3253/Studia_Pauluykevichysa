@@ -49,6 +49,12 @@ def card(content: ft.Control, **container_kwargs) -> ft.Container:
         border_radius=CARD_RADIUS,
         bgcolor=ft.Colors.SURFACE,
         border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+        shadow=ft.BoxShadow(
+            blur_radius=8,
+            spread_radius=0,
+            color=ft.Colors.with_opacity(0.08, ft.Colors.BLACK),
+            offset=ft.Offset(0, 2),
+        ),
     )
     defaults.update(container_kwargs)
     return ft.Container(**defaults)
