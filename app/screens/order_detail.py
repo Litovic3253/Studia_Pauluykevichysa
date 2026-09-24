@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Callable
 
 import flet as ft
+import httpx
 
 import db
 import pricing
@@ -65,23 +66,30 @@ class OrderDetailScreen(ft.Column):
         self.page.update()
         self.refresh()
 
-    def refresh(self) -> None:
+    def refresh(self, from_sync: bool = False) -> None:
         order = db.get_order(self.order_id)
         if not order:
             self.on_back()
             return
+
+        if not from_sync:
+            # Текстовые поля коммитятся только по on_blur — при live-sync тике их
+            # нельзя перезаписывать, иначе теряется незасохранённый ввод пользователя.
+            self.client_field.value = order["client"] or ""
+            self.contact_field.value = order["contact"] or ""
+            self.material_field.value = order["material"] or ""
+            self.color_field.value = order["color"] or ""
+            self.weight_field.value = str(order["weight_g"] or 0)
+            self.hours_field.value = str(order["print_hours"] or 0)
+            self.qty_field.value = str(order["qty"] or 1)
+            self.deadline_field.value = order["deadline"] or ""
+            self.price_field.value = str(order["price"] or 0)
+            self.notes_field.value = order["notes"] or ""
+
+        # Dropdown/Switch коммитятся сразу через on_change, поэтому их можно
+        # безопасно обновлять и во время live-sync.
         self.status_dd.value = order["status"]
         self.paid_switch.value = bool(order["paid"])
-        self.client_field.value = order["client"] or ""
-        self.contact_field.value = order["contact"] or ""
-        self.material_field.value = order["material"] or ""
-        self.color_field.value = order["color"] or ""
-        self.weight_field.value = str(order["weight_g"] or 0)
-        self.hours_field.value = str(order["print_hours"] or 0)
-        self.qty_field.value = str(order["qty"] or 1)
-        self.deadline_field.value = order["deadline"] or ""
-        self.price_field.value = str(order["price"] or 0)
-        self.notes_field.value = order["notes"] or ""
         self.price_text.value = (
             f"Себестоимость: {pricing.money(order['cost'])} · Цена: {pricing.money(order['price'])}"
         )
@@ -110,16 +118,23 @@ class OrderDetailScreen(ft.Column):
 
     def _open_path(self, path: str) -> None:
         import os
-        os.startfile(path)  # noqa: S606 - открытие локального файла по клику пользователя
+        try:
+            os.startfile(path)  # noqa: S606 - открытие локального файла по клику пользователя
+        except OSError as exc:
+            self.status_banner.color = ft.Colors.RED
+            self.status_banner.value = f"Не удалось открыть файл: {exc}"
+            self.update()
 
     def _download_attachment(self, attachment_id: int) -> None:
         attachment = db.get_attachment(attachment_id)
         try:
             path = download_file(attachment["file_id"])
-        except TelegramFileError as exc:
+        except (TelegramFileError, httpx.HTTPError, OSError) as exc:
+            self.status_banner.color = ft.Colors.RED
             self.status_banner.value = str(exc)
             self.update()
             return
+        self.status_banner.color = None
         self.status_banner.value = f"Скачано: {path}"
         self.update()
 

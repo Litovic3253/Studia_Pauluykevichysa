@@ -10,6 +10,7 @@ class CustomersScreen(ft.Column):
         super().__init__(expand=True, spacing=10)
         self.search_text = ""
         self.selected_customer_id: int | None = None
+        self._notes_field: ft.TextField | None = None
 
         self.search_field = ft.TextField(label="Поиск клиента", on_change=self._on_search)
         self.list_view = ft.ListView(expand=True, spacing=6)
@@ -22,13 +23,13 @@ class CustomersScreen(ft.Column):
         self.search_text = self.search_field.value or ""
         self.refresh()
 
-    def refresh(self) -> None:
+    def refresh(self, from_sync: bool = False) -> None:
         customers = db.list_customers(self.search_text.strip())
         self.list_view.controls = [self._customer_tile(c) for c in customers] or [
             ft.Text("Клиентов нет.", italic=True)
         ]
         if self.selected_customer_id is not None:
-            self._render_detail(self.selected_customer_id)
+            self._render_detail(self.selected_customer_id, from_sync=from_sync)
         if self.page:
             self.update()
 
@@ -47,16 +48,22 @@ class CustomersScreen(ft.Column):
         self._render_detail(customer_id)
         self.update()
 
-    def _render_detail(self, customer_id: int) -> None:
+    def _render_detail(self, customer_id: int, from_sync: bool = False) -> None:
         customer = db.get_customer(customer_id)
         if not customer:
             self.detail_column.visible = False
             self.selected_customer_id = None
             return
-        notes_field = ft.TextField(
-            label="Заметки", value=customer["notes"] or "", multiline=True,
-            on_blur=lambda e, cid=customer_id: db.update_customer(cid, notes=notes_field.value),
-        )
+        if from_sync and self.detail_column.controls:
+            # notes_field — TextField с сохранением по on_blur: во время live-sync
+            # переиспользуем текущий контрол, чтобы не затереть незасохранённый ввод.
+            notes_field = self._notes_field
+        else:
+            notes_field = ft.TextField(
+                label="Заметки", value=customer["notes"] or "", multiline=True,
+                on_blur=lambda e, cid=customer_id: db.update_customer(cid, notes=notes_field.value),
+            )
+            self._notes_field = notes_field
         orders = [o for o in db.list_orders("all", limit=200) if o["customer_id"] == customer_id]
         order_rows = [
             ft.Text(f"#{o['id']} · {db.STATUSES.get(o['status'], o['status'])} · {pricing.money(o['price'])}")

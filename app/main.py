@@ -33,17 +33,19 @@ class OrdersSection(ft.Column):
     def _open_order(self, order_id: int) -> None:
         self.detail_screen = OrderDetailScreen(order_id=order_id, on_back=self._back_to_list)
         self.controls = [self.detail_screen]
-        self.update()
+        if self.page:
+            self.update()
 
     def _back_to_list(self) -> None:
         self.detail_screen = None
         self.list_screen.refresh()
         self.controls = [self.list_screen]
-        self.update()
+        if self.page:
+            self.update()
 
-    def refresh(self) -> None:
+    def refresh(self, from_sync: bool = False) -> None:
         if self.detail_screen is not None:
-            self.detail_screen.refresh()
+            self.detail_screen.refresh(from_sync=from_sync)
         else:
             self.list_screen.refresh()
 
@@ -88,9 +90,8 @@ def main(page: ft.Page) -> None:
     )
 
     def on_db_changed() -> None:
-        orders_section.refresh()
-        customers_screen.refresh()
-        prices_screen.refresh()
+        orders_section.refresh(from_sync=True)
+        customers_screen.refresh(from_sync=True)
         stats_screen.refresh()
 
     page.pubsub.subscribe(lambda _: on_db_changed())
