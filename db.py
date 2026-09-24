@@ -361,14 +361,14 @@ def add_attachment(order_id: int, source: str, *, file_id: str | None = None,
         return cur.lastrowid
 
 
-def list_attachments(order_id: int):
+def list_attachments(order_id: int) -> list[sqlite3.Row]:
     with _conn() as c:
         return c.execute(
             "SELECT * FROM attachments WHERE order_id = ? ORDER BY id", (order_id,)
         ).fetchall()
 
 
-def get_attachment(attachment_id: int):
+def get_attachment(attachment_id: int) -> sqlite3.Row | None:
     with _conn() as c:
         return c.execute("SELECT * FROM attachments WHERE id = ?", (attachment_id,)).fetchone()
 
