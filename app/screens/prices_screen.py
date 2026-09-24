@@ -3,11 +3,12 @@ import flet as ft
 
 import db
 import pricing
+from app import theme
 
 
 class PricesScreen(ft.Column):
     def __init__(self):
-        super().__init__(expand=True, spacing=10)
+        super().__init__(expand=True, spacing=theme.SPACING)
         self.materials_column = ft.Column(spacing=4)
         self.new_material_name = ft.TextField(label="Материал (напр. PLA)", width=200)
         self.new_material_price = ft.TextField(label="Цена за кг", width=150)
@@ -18,13 +19,17 @@ class PricesScreen(ft.Column):
 
         self.controls = [
             ft.Text("Цены и настройки", size=20, weight=ft.FontWeight.BOLD),
-            ft.Text("Материалы (₽/кг):", weight=ft.FontWeight.BOLD),
-            self.materials_column,
-            ft.Row([self.new_material_name, self.new_material_price,
-                    ft.ElevatedButton("Добавить", on_click=self._add_material)]),
-            self.hour_rate_field,
-            self.reverse_price_field,
-            self.currency_field,
+            theme.card(ft.Column([
+                ft.Text("Материалы (₽/кг):", weight=ft.FontWeight.BOLD),
+                self.materials_column,
+                ft.Row([self.new_material_name, self.new_material_price,
+                        ft.ElevatedButton("Добавить", on_click=self._add_material)]),
+            ], spacing=theme.SPACING)),
+            theme.card(ft.Column([
+                self.hour_rate_field,
+                self.reverse_price_field,
+                self.currency_field,
+            ], spacing=theme.SPACING)),
             self.status_text,
         ]
         self.refresh()
