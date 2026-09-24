@@ -70,6 +70,17 @@ def init() -> None:
         cols = {r["name"] for r in c.execute("PRAGMA table_info(orders)")}
         if "reverse_engineering" not in cols:
             c.execute("ALTER TABLE orders ADD COLUMN reverse_engineering INTEGER DEFAULT 0")
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                contact TEXT,
+                notes TEXT,
+                created_at TEXT NOT NULL
+            )"""
+        )
+        if "customer_id" not in cols:
+            c.execute("ALTER TABLE orders ADD COLUMN customer_id INTEGER REFERENCES customers(id)")
         c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
         for key, value in DEFAULT_SETTINGS.items():
             c.execute(
@@ -77,6 +88,7 @@ def init() -> None:
                 (key, json.dumps(value, ensure_ascii=False)),
             )
         _migrate_pricing_v2(c)
+        _migrate_customers_v1(c)
 
 
 def _migrate_pricing_v2(c) -> None:
@@ -93,6 +105,32 @@ def _migrate_pricing_v2(c) -> None:
     )
     c.execute("DELETE FROM settings WHERE key IN ('markup', 'min_price')")
     c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('pricing_v2', 'true')")
+
+
+def _migrate_customers_v1(c) -> None:
+    """Разовая группировка существующих заказов без customer_id в таблицу customers."""
+    if c.execute("SELECT 1 FROM settings WHERE key = 'customers_v1'").fetchone():
+        return
+    groups: dict[tuple[str, str], list[int]] = {}
+    for row in c.execute("SELECT id, client, contact FROM orders WHERE customer_id IS NULL"):
+        key = ((row["client"] or "").strip().lower(), (row["contact"] or "").strip().lower())
+        if not key[0]:
+            continue
+        groups.setdefault(key, []).append(row["id"])
+    for order_ids in groups.values():
+        first = c.execute(
+            "SELECT client, contact FROM orders WHERE id = ?", (order_ids[0],)
+        ).fetchone()
+        cur = c.execute(
+            "INSERT INTO customers (name, contact, notes, created_at) VALUES (?, ?, '', ?)",
+            (first["client"], first["contact"], datetime.now().isoformat(timespec="seconds")),
+        )
+        customer_id = cur.lastrowid
+        c.executemany(
+            "UPDATE orders SET customer_id = ? WHERE id = ?",
+            [(customer_id, oid) for oid in order_ids],
+        )
+    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('customers_v1', 'true')")
 
 
 # ---------- настройки ----------
@@ -113,14 +151,77 @@ def set_setting(key: str, value) -> None:
         )
 
 
+# ---------- клиенты ----------
+
+def find_or_create_customer(name: str, contact: str | None) -> int:
+    name = (name or "").strip()
+    contact = (contact or "").strip()
+    name_lower = name.lower()
+    contact_lower = contact.lower()
+    with _conn() as c:
+        # Fetch all customers and do case-insensitive comparison in Python
+        # (LOWER() in SQLite doesn't handle Cyrillic correctly)
+        for row in c.execute("SELECT id, name, contact FROM customers"):
+            if row["name"].lower() == name_lower and (row["contact"] or "").lower() == contact_lower:
+                return row["id"]
+        # No match found, create a new customer
+        cur = c.execute(
+            "INSERT INTO customers (name, contact, notes, created_at) VALUES (?, ?, '', ?)",
+            (name, contact, datetime.now().isoformat(timespec="seconds")),
+        )
+        return cur.lastrowid
+
+
+def get_customer(customer_id: int):
+    with _conn() as c:
+        return c.execute("SELECT * FROM customers WHERE id = ?", (customer_id,)).fetchone()
+
+
+def list_customers(search: str = ""):
+    search_lower = search.lower()
+    with _conn() as c:
+        all_customers = c.execute(
+            """SELECT c.*,
+                COUNT(o.id) AS orders_count,
+                COALESCE(SUM(CASE WHEN o.paid = 1 THEN o.price END), 0) AS paid_total,
+                COALESCE(SUM(CASE WHEN o.paid = 0 AND o.status != 'cancelled' THEN o.price END), 0) AS debt_total
+            FROM customers c
+            LEFT JOIN orders o ON o.customer_id = c.id
+            GROUP BY c.id
+            ORDER BY c.name COLLATE NOCASE""",
+        ).fetchall()
+
+    if not search_lower:
+        return all_customers
+
+    # Filter results in Python for case-insensitive search with Cyrillic support
+    filtered = []
+    for row in all_customers:
+        if (search_lower in row["name"].lower() or
+            (row["contact"] and search_lower in row["contact"].lower())):
+            filtered.append(row)
+    return filtered
+
+
+def update_customer(customer_id: int, **fields) -> None:
+    if not fields:
+        return
+    sets = ", ".join(f"{k} = ?" for k in fields)
+    with _conn() as c:
+        c.execute(f"UPDATE customers SET {sets} WHERE id = ?", [*fields.values(), customer_id])
+
+
 # ---------- заказы ----------
 
 def add_order(data: dict) -> int:
     fields = [
         "client", "contact", "description", "file_id", "file_type", "material", "color",
         "weight_g", "print_hours", "qty", "deadline", "cost", "price", "notes",
-        "reverse_engineering",
+        "reverse_engineering", "customer_id",
     ]
+    data = dict(data)
+    if not data.get("customer_id") and data.get("client"):
+        data["customer_id"] = find_or_create_customer(data["client"], data.get("contact"))
     values = [data.get(f) for f in fields]
     with _conn() as c:
         cur = c.execute(
