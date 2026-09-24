@@ -1,0 +1,6 @@
+.env
+orders.db
+.venv/
+__pycache__/
+*.log
+bot_last_error.log
