@@ -1,4 +1,5 @@
 """Фоновый опрос БД, чтобы экраны обновлялись без ручного refresh."""
+import logging
 import threading
 from typing import Callable
 
@@ -23,7 +24,10 @@ class LiveSync:
 
     def _run(self) -> None:
         while not self._stop.wait(self._interval):
-            current = db.change_fingerprint()
-            if current != self._last:
-                self._last = current
-                self._on_change()
+            try:
+                current = db.change_fingerprint()
+                if current != self._last:
+                    self._last = current
+                    self._on_change()
+            except Exception:
+                logging.exception("LiveSync: ошибка при проверке изменений в БД")
