@@ -62,9 +62,14 @@ class OrderDetailScreen(ft.Column):
         self._loaded = False
 
     def did_mount(self) -> None:
-        self.page.overlay.append(self.file_picker)
-        self.page.update()
+        if self.file_picker not in self.page.overlay:
+            self.page.overlay.append(self.file_picker)
+            self.page.update()
         self.refresh()
+
+    def will_unmount(self) -> None:
+        if self.file_picker in self.page.overlay:
+            self.page.overlay.remove(self.file_picker)
 
     def refresh(self, from_sync: bool = False) -> None:
         order = db.get_order(self.order_id)

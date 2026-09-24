@@ -50,11 +50,16 @@ class NewOrderScreen(ft.Column):
         ]
 
     def did_mount(self) -> None:
-        self.page.overlay.append(self.file_picker)
+        if self.file_picker not in self.page.overlay:
+            self.page.overlay.append(self.file_picker)
         settings = db.get_settings()
         self.material_dd.options = [ft.dropdown.Option(m) for m in settings["materials"]]
         self.page.update()
         self._recalc(None)
+
+    def will_unmount(self) -> None:
+        if self.file_picker in self.page.overlay:
+            self.page.overlay.remove(self.file_picker)
 
     def _on_file_picked(self, e: ft.FilePickerResultEvent) -> None:
         self._picked_files = list(e.files or [])
