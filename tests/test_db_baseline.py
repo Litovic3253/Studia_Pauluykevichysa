@@ -39,3 +39,12 @@ def test_list_orders_active_excludes_delivered(temp_db):
 def test_settings_roundtrip(temp_db):
     db.set_setting("hour_rate", 75)
     assert db.get_settings()["hour_rate"] == 75
+
+
+def test_theme_mode_defaults_to_system(temp_db):
+    assert db.get_settings()["theme_mode"] == "system"
+
+
+def test_theme_mode_can_be_changed(temp_db):
+    db.set_setting("theme_mode", "dark")
+    assert db.get_settings()["theme_mode"] == "dark"
