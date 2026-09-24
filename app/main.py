@@ -61,7 +61,7 @@ def main(page: ft.Page) -> None:
     page.theme = theme.LIGHT_THEME
     page.dark_theme = theme.DARK_THEME
     current_theme_mode = db.get_settings().get("theme_mode", "system")
-    page.theme_mode = theme.FLET_THEME_MODES[current_theme_mode]
+    page.theme_mode = theme.flet_theme_mode(current_theme_mode)
 
     orders_section = OrdersSection()
     customers_screen = CustomersScreen()
@@ -87,12 +87,12 @@ def main(page: ft.Page) -> None:
         nonlocal current_theme_mode
         current_theme_mode = theme.next_theme_mode(current_theme_mode)
         db.set_setting("theme_mode", current_theme_mode)
-        page.theme_mode = theme.FLET_THEME_MODES[current_theme_mode]
+        page.theme_mode = theme.flet_theme_mode(current_theme_mode)
         theme_button.icon = theme.THEME_ICONS[current_theme_mode]
         page.update()
 
     theme_button = ft.IconButton(
-        icon=theme.THEME_ICONS[current_theme_mode],
+        icon=theme.THEME_ICONS.get(current_theme_mode, theme.THEME_ICONS["system"]),
         tooltip="Тема оформления",
         on_click=toggle_theme,
     )

@@ -1,6 +1,7 @@
 """Тесты для app/theme.py — чистые функции, без side effects."""
 import flet as ft
 
+import db
 from app import theme
 
 
@@ -33,3 +34,14 @@ def test_flet_theme_modes_cover_every_cycle_value():
     for mode in theme.THEME_MODE_CYCLE:
         assert mode in theme.FLET_THEME_MODES
         assert mode in theme.THEME_ICONS
+
+
+def test_flet_theme_mode_handles_every_stored_value_safely(temp_db):
+    for mode in theme.THEME_MODE_CYCLE:
+        db.set_setting("theme_mode", mode)
+        stored = db.get_settings()["theme_mode"]
+        assert theme.flet_theme_mode(stored) in theme.FLET_THEME_MODES.values()
+
+
+def test_flet_theme_mode_falls_back_to_system_for_unknown_value():
+    assert theme.flet_theme_mode("corrupted-value") == theme.FLET_THEME_MODES["system"]

@@ -35,6 +35,11 @@ def next_theme_mode(current: str) -> str:
     return THEME_MODE_CYCLE[(idx + 1) % len(THEME_MODE_CYCLE)]
 
 
+def flet_theme_mode(value: str) -> ft.ThemeMode:
+    """Безопасное преобразование строки в ft.ThemeMode — неизвестное значение считается «system»."""
+    return FLET_THEME_MODES.get(value, ft.ThemeMode.SYSTEM)
+
+
 def card(content: ft.Control, **container_kwargs) -> ft.Container:
     """Единая обёртка «карточка»: скруглённые углы, поверхностный фон темы,
     внутренний отступ — используется всеми экранами вместо голого Column/Row."""
