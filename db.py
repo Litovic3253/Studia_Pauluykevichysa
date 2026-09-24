@@ -43,6 +43,7 @@ def _conn():
 
 def init() -> None:
     with _conn() as c:
+        c.execute("PRAGMA journal_mode=WAL")
         c.execute(
             """CREATE TABLE IF NOT EXISTS orders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

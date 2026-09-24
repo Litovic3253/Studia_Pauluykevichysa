@@ -4,3 +4,6 @@ orders.db
 __pycache__/
 *.log
 bot_last_error.log
+app/files_cache/
+app/files_storage/
+.pytest_cache/
