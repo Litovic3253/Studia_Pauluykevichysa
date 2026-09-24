@@ -8,6 +8,7 @@ import httpx
 
 import db
 import pricing
+from app import theme
 from app.telegram_files import TelegramFileError, download_file
 
 LOCAL_STORAGE = Path(__file__).resolve().parent.parent / "files_storage"
@@ -15,7 +16,7 @@ LOCAL_STORAGE = Path(__file__).resolve().parent.parent / "files_storage"
 
 class OrderDetailScreen(ft.Column):
     def __init__(self, order_id: int, on_back: Callable[[], None]):
-        super().__init__(expand=True, spacing=10)
+        super().__init__(expand=True, spacing=theme.SPACING)
         self.order_id = order_id
         self.on_back = on_back
 
@@ -45,17 +46,23 @@ class OrderDetailScreen(ft.Column):
         self.controls = [
             ft.Row([ft.TextButton("← К списку", on_click=lambda e: self.on_back()), self.status_banner]),
             ft.Text(f"Заказ #{order_id}", size=20, weight=ft.FontWeight.BOLD),
-            ft.Row([self.status_dd, self.paid_switch]),
-            ft.Row([self.client_field, self.contact_field]),
-            self.customer_dd,
-            ft.Row([self.material_field, self.color_field]),
-            ft.Row([self.weight_field, self.hours_field, self.qty_field]),
-            ft.Row([self.deadline_field, self.price_field]),
-            self.price_text,
-            self.notes_field,
-            ft.Text("Вложения", weight=ft.FontWeight.BOLD),
-            self.attachments_column,
-            ft.ElevatedButton("Добавить файл", icon=ft.Icons.UPLOAD_FILE, on_click=self._on_add_file_click),
+            theme.card(ft.Column([
+                ft.Row([self.status_dd, self.paid_switch]),
+                ft.Row([self.client_field, self.contact_field]),
+                self.customer_dd,
+            ], spacing=theme.SPACING)),
+            theme.card(ft.Column([
+                ft.Row([self.material_field, self.color_field]),
+                ft.Row([self.weight_field, self.hours_field, self.qty_field]),
+                ft.Row([self.deadline_field, self.price_field]),
+                self.price_text,
+                self.notes_field,
+            ], spacing=theme.SPACING)),
+            theme.card(ft.Column([
+                ft.Text("Вложения", weight=ft.FontWeight.BOLD),
+                self.attachments_column,
+                ft.ElevatedButton("Добавить файл", icon=ft.Icons.UPLOAD_FILE, on_click=self._on_add_file_click),
+            ], spacing=theme.SPACING)),
             ft.OutlinedButton("Удалить заказ", icon=ft.Icons.DELETE, on_click=self._on_delete_click,
                                style=ft.ButtonStyle(color=ft.Colors.RED)),
         ]
