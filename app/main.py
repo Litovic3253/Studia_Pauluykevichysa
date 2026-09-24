@@ -10,6 +10,7 @@ import flet as ft
 from dotenv import load_dotenv
 
 import db
+from app import theme
 from app.live_sync import LiveSync
 from app.screens.customers_screen import CustomersScreen
 from app.screens.new_order import NewOrderScreen
@@ -54,7 +55,13 @@ def main(page: ft.Page) -> None:
     page.title = "Mochi Desktop"
     page.window.width = 1200
     page.window.height = 800
+    page.padding = 0
     db.init()
+
+    page.theme = theme.LIGHT_THEME
+    page.dark_theme = theme.DARK_THEME
+    current_theme_mode = db.get_settings().get("theme_mode", "system")
+    page.theme_mode = theme.FLET_THEME_MODES[current_theme_mode]
 
     orders_section = OrdersSection()
     customers_screen = CustomersScreen()
@@ -70,15 +77,30 @@ def main(page: ft.Page) -> None:
     new_order_screen = NewOrderScreen(on_created=go_to_orders_after_create)
 
     sections = [orders_section, new_order_screen, customers_screen, prices_screen, stats_screen]
-    content = ft.Container(content=orders_section, expand=True)
+    content = ft.Container(content=orders_section, expand=True, padding=theme.PAGE_PADDING)
 
     def on_nav_change(e: ft.ControlEvent) -> None:
         content.content = sections[nav_rail.selected_index]
         page.update()
 
+    def toggle_theme(e: ft.ControlEvent) -> None:
+        nonlocal current_theme_mode
+        current_theme_mode = theme.next_theme_mode(current_theme_mode)
+        db.set_setting("theme_mode", current_theme_mode)
+        page.theme_mode = theme.FLET_THEME_MODES[current_theme_mode]
+        theme_button.icon = theme.THEME_ICONS[current_theme_mode]
+        page.update()
+
+    theme_button = ft.IconButton(
+        icon=theme.THEME_ICONS[current_theme_mode],
+        tooltip="Тема оформления",
+        on_click=toggle_theme,
+    )
+
     nav_rail = ft.NavigationRail(
         selected_index=0,
         label_type=ft.NavigationRailLabelType.ALL,
+        leading=theme_button,
         destinations=[
             ft.NavigationRailDestination(icon=ft.Icons.LIST_ALT, label="Заказы"),
             ft.NavigationRailDestination(icon=ft.Icons.ADD_BOX, label="Новый заказ"),
