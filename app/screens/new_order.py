@@ -1,4 +1,5 @@
-"""Экран «Новый заказ»: форма создания без необходимости в Telegram."""
+"""Экран «Новый заказ»: слева форма (клиент, печать, файлы), справа блок «Итого» с разбивкой цены
+(на узком окне — под формой)."""
 import shutil
 from typing import Callable
 
@@ -7,7 +8,7 @@ import flet as ft
 import db
 import pricing
 from paths import DATA_DIR
-from app import input_hints, theme
+from app import input_hints, price_view, theme
 
 LOCAL_STORAGE = DATA_DIR / "files_storage"
 
@@ -18,48 +19,60 @@ class NewOrderScreen(ft.Column):
         self.on_created = on_created
         self._picked_files: list = []
 
-        self.client_field = ft.TextField(label="Клиент *")
-        self.contact_field = ft.TextField(label="Контакт")
-        self.description_field = ft.TextField(label="Описание", multiline=True)
-        self.material_dd = ft.Dropdown(label="Материал", on_change=self._recalc)
-        self.color_field = ft.TextField(label="Цвет")
+        half = {"xs": 12, "md": 6}
+        third = {"xs": 12, "sm": 6, "md": 4}
+
+        self.client_field = theme.field("Клиент *", half)
+        self.contact_field = theme.field("Контакт", half, hint_text="телефон, @ник, авито…")
+        self.description_field = theme.field("Описание", {"xs": 12}, multiline=True, min_lines=2)
+        self.material_dd = theme.dropdown("Материал", on_change=self._recalc)
+        self.color_field = theme.field("Цвет", half)
         self.weight_field = input_hints.weight_field(
-            value="0", on_change=self._recalc, on_pick=lambda: self._recalc(None)
+            value="0", on_change=self._recalc, on_pick=lambda: self._recalc(None), col=half,
         )
         self.hours_field = input_hints.hours_field(
-            value="0", on_change=self._recalc, on_pick=lambda: self._recalc(None)
+            value="0", on_change=self._recalc, on_pick=lambda: self._recalc(None), col=half,
         )
-        self.qty_field = ft.TextField(label="Кол-во", value="1", on_change=self._recalc)
-        self.defect_field = ft.TextField(
-            label="Брак, %", value=pricing.fmt_number(db.get_settings()["defect_percent"]),
-            helper_text="от цены печати", on_change=self._recalc, width=160,
+        self.qty_field = theme.field("Кол-во, шт", third, value="1", on_change=self._recalc)
+        self.defect_field = theme.field(
+            "Брак, %", third, value=pricing.fmt_number(db.get_settings()["defect_percent"]),
+            helper_text="от цены печати", on_change=self._recalc,
         )
-        self.deadline_field = ft.TextField(label="Срок (сегодня / завтра / 25.09)")
-        self.reverse_checkbox = ft.Checkbox(label="Реверс-моделирование (нет STL)", on_change=self._recalc)
-        self.price_preview = ft.Text()
-        self.custom_price_field = ft.TextField(label="Своя цена (необязательно)")
-        self.files_text = ft.Text("Файлы не выбраны.")
+        self.deadline_field = theme.field("Срок", third, hint_text="дд.мм.гггг", helper_text="или «завтра»")
+        self.reverse_checkbox = ft.Checkbox(label="Реверс-моделирование (у клиента нет 3D-модели)",
+                                            on_change=self._recalc)
+        self.breakdown_column = ft.Column(spacing=6)
+        self.custom_price_field = theme.field("Своя цена", {"xs": 12}, helper_text="Необязательно — вместо расчётной")
+        self.files_text = ft.Text("Файлы не выбраны.", size=13, color=ft.Colors.ON_SURFACE_VARIANT)
         self.file_picker = ft.FilePicker(on_result=self._on_file_picked)
         self.error_text = ft.Text("", color=ft.Colors.RED)
 
-        self.controls = [
-            ft.Text("Новый заказ", size=20, weight=ft.FontWeight.BOLD),
-            theme.card(ft.Column([
-                ft.Row([self.client_field, self.contact_field]),
-                self.description_field,
-            ], spacing=theme.SPACING)),
-            theme.card(ft.Column([
-                ft.Row([self.material_dd, self.color_field]),
-                ft.Row([self.weight_field, self.hours_field, self.qty_field, self.defect_field]),
-                ft.Row([self.deadline_field, self.reverse_checkbox]),
-                self.price_preview,
-                self.custom_price_field,
-                ft.Row([ft.ElevatedButton("Прикрепить файлы", icon=ft.Icons.UPLOAD_FILE,
-                                           on_click=lambda e: self.file_picker.pick_files(allow_multiple=True)),
-                        self.files_text]),
-            ], spacing=theme.SPACING)),
+        form = ft.Column([
+            theme.section("Клиент", [theme.grid([self.client_field, self.contact_field, self.description_field])],
+                          icon=ft.Icons.PERSON_OUTLINE),
+            theme.section("Печать", [
+                theme.grid([theme.in_col(self.material_dd, half), self.color_field, self.weight_field, self.hours_field,
+                            self.qty_field, self.defect_field, self.deadline_field]),
+                self.reverse_checkbox,
+            ], icon=ft.Icons.PRECISION_MANUFACTURING),
+            theme.section("Файлы", [
+                ft.Row([ft.OutlinedButton("Прикрепить файлы", icon=ft.Icons.ATTACH_FILE,
+                                          on_click=lambda e: self.file_picker.pick_files(allow_multiple=True)),
+                        ft.Container(self.files_text, expand=True)], wrap=True),
+            ], icon=ft.Icons.FOLDER_OPEN),
+        ], spacing=theme.SPACING, col={"xs": 12, "lg": 8})
+
+        summary = theme.section("Итого", [
+            self.breakdown_column,
+            theme.grid([self.custom_price_field]),
             self.error_text,
-            ft.ElevatedButton("Создать заказ", icon=ft.Icons.ADD, on_click=self._on_save),
+            ft.FilledButton("Создать заказ", icon=ft.Icons.CHECK, on_click=self._on_save,
+                            style=ft.ButtonStyle(padding=18), width=10_000),
+        ], icon=ft.Icons.CALCULATE_OUTLINED, col={"xs": 12, "lg": 4})
+
+        self.controls = [
+            theme.page_header("Новый заказ", "Цена считается сама по мере заполнения"),
+            theme.grid([form, summary]),
         ]
 
     def did_mount(self) -> None:
@@ -90,9 +103,7 @@ class NewOrderScreen(ft.Column):
         result = pricing.calc_price(
             self.material_dd.value, weight, hours, qty, bool(self.reverse_checkbox.value), defect
         )
-        parts = [f"Расчётная цена: {pricing.money(result['price'])}",
-                 pricing.defect_line(defect, result["defect_cost"])]
-        self.price_preview.value = "  ·  ".join(p for p in parts if p)
+        self.breakdown_column.controls = price_view.breakdown_rows(result, defect)
         if self.page:
             self.update()
 
@@ -108,6 +119,14 @@ class NewOrderScreen(ft.Column):
             self.error_text.value = "Проверьте вес и часы печати — формат не распознан (см. подсказку ⓘ у поля)."
             self.update()
             return
+        deadline_text = (self.deadline_field.value or "").strip()
+        deadline = pricing.parse_date(deadline_text) if deadline_text else None
+        if deadline_text and not deadline:
+            self.deadline_field.error_text = "Не понял дату. Пример: 25.10.2026 или «завтра»"
+            self.error_text.value = "Проверьте срок."
+            self.update()
+            return
+        self.deadline_field.error_text = None
         qty = int(pricing.parse_number(self.qty_field.value) or 1)
         reverse = bool(self.reverse_checkbox.value)
         defect = pricing.parse_number(self.defect_field.value) or 0
@@ -124,7 +143,7 @@ class NewOrderScreen(ft.Column):
             "weight_g": weight,
             "print_hours": hours,
             "qty": qty,
-            "deadline": pricing.parse_date(self.deadline_field.value),
+            "deadline": deadline,
             "cost": round(calc["cost"], 2),
             "price": price,
             "notes": "",

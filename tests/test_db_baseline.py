@@ -80,3 +80,13 @@ def test_init_migrates_old_orders_table_without_defect_column(temp_db):
     order = db.get_order(order_id)
     assert order["defect_percent"] == 0
     assert order["price"] == 500
+
+
+def test_count_orders_matches_list_filters(temp_db):
+    a = db.add_order({"client": "A", "contact": "", "cost": 0, "price": 0})
+    b = db.add_order({"client": "B", "contact": "", "cost": 0, "price": 0})
+    c = db.add_order({"client": "C", "contact": "", "cost": 0, "price": 0})
+    db.update_order(b, status="delivered", paid=1)
+    db.update_order(c, status="cancelled")
+    counts = db.count_orders()
+    assert counts == {"active": 1, "unpaid": 1, "done": 2, "all": 3}

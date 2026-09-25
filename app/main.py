@@ -27,9 +27,9 @@ load_dotenv(DATA_DIR / ".env")
 class OrdersSection(ft.Column):
     """Заказы: список, при клике на заказ показывает его карточку вместо списка."""
 
-    def __init__(self):
+    def __init__(self, on_new_order=None):
         super().__init__(expand=True)
-        self.list_screen = OrdersScreen(on_open_order=self._open_order)
+        self.list_screen = OrdersScreen(on_open_order=self._open_order, on_new_order=on_new_order)
         self.detail_screen: OrderDetailScreen | None = None
         self.controls = [self.list_screen]
 
@@ -55,8 +55,10 @@ class OrdersSection(ft.Column):
 
 def main(page: ft.Page) -> None:
     page.title = "Mochi Desktop"
-    page.window.width = 1200
-    page.window.height = 800
+    page.window.width = 1280
+    page.window.height = 820
+    page.window.min_width = 520
+    page.window.min_height = 480
     page.padding = 0
     db.init()
 
@@ -65,24 +67,33 @@ def main(page: ft.Page) -> None:
     current_theme_mode = db.get_settings().get("theme_mode", "system")
     page.theme_mode = theme.flet_theme_mode(current_theme_mode)
 
-    orders_section = OrdersSection()
-    customers_screen = CustomersScreen()
-    prices_screen = PricesScreen()
-    stats_screen = StatsScreen()
+    def go_to_new_order() -> None:
+        nav_rail.selected_index = 1
+        on_nav_change(None)
 
-    def go_to_orders_after_create(order_id: int) -> None:
-        content.content = orders_section
+    def open_order_from_anywhere(order_id: int) -> None:
         nav_rail.selected_index = 0
+        content.content = orders_section
         page.update()
         orders_section._open_order(order_id)
 
-    new_order_screen = NewOrderScreen(on_created=go_to_orders_after_create)
+    orders_section = OrdersSection(on_new_order=go_to_new_order)
+    customers_screen = CustomersScreen(on_open_order=open_order_from_anywhere)
+    prices_screen = PricesScreen()
+    stats_screen = StatsScreen()
+    new_order_screen = NewOrderScreen(on_created=open_order_from_anywhere)
 
     sections = [orders_section, new_order_screen, customers_screen, prices_screen, stats_screen]
-    content = ft.Container(content=orders_section, expand=True, padding=theme.PAGE_PADDING)
+    content = ft.Container(content=orders_section, expand=True, alignment=ft.alignment.top_center,
+                           padding=ft.padding.symmetric(horizontal=theme.PAGE_PADDING, vertical=20))
 
-    def on_nav_change(e: ft.ControlEvent) -> None:
-        content.content = sections[nav_rail.selected_index]
+    def on_nav_change(e: ft.ControlEvent | None) -> None:
+        section = sections[nav_rail.selected_index]
+        if section is orders_section and orders_section.detail_screen is not None and e is not None:
+            orders_section._back_to_list()  # клик по «Заказы» в меню — всегда к списку
+        if section is not new_order_screen and hasattr(section, "refresh"):
+            section.refresh()
+        content.content = section
         page.update()
 
     def toggle_theme(e: ft.ControlEvent) -> None:
@@ -90,14 +101,7 @@ def main(page: ft.Page) -> None:
         current_theme_mode = theme.next_theme_mode(current_theme_mode)
         db.set_setting("theme_mode", current_theme_mode)
         page.theme_mode = theme.flet_theme_mode(current_theme_mode)
-        theme_button.icon = theme.THEME_ICONS[current_theme_mode]
-        page.update()
-
-    theme_button = ft.IconButton(
-        icon=theme.THEME_ICONS.get(current_theme_mode, theme.THEME_ICONS["system"]),
-        tooltip="Тема оформления",
-        on_click=toggle_theme,
-    )
+        apply_layout()
 
     def on_export_file_selected(e: ft.FilePickerResultEvent) -> None:
         if not e.path:
@@ -118,25 +122,82 @@ def main(page: ft.Page) -> None:
             allowed_extensions=["xlsx"],
         )
 
-    export_button = ft.IconButton(
-        icon=ft.Icons.FILE_DOWNLOAD,
-        tooltip="Экспорт в Excel",
-        on_click=on_export_click,
-    )
+    theme_labels = {"system": "Тема: как в системе", "light": "Тема: светлая", "dark": "Тема: тёмная"}
+
+    def rail_trailing(extended: bool) -> ft.Control:
+        """Тема и экспорт внизу меню: с подписями на широком окне, иконками с подсказками — на узком."""
+        theme_icon = theme.THEME_ICONS.get(current_theme_mode, theme.THEME_ICONS["system"])
+        theme_label = theme_labels.get(current_theme_mode, theme_labels["system"])
+        if extended:
+            buttons = [
+                ft.TextButton(theme_label, icon=theme_icon, on_click=toggle_theme),
+                ft.TextButton("Экспорт в Excel", icon=ft.Icons.FILE_DOWNLOAD_OUTLINED, on_click=on_export_click),
+            ]
+            align = ft.CrossAxisAlignment.START
+        else:
+            buttons = [
+                ft.IconButton(theme_icon, tooltip=theme_label, on_click=toggle_theme),
+                ft.IconButton(ft.Icons.FILE_DOWNLOAD_OUTLINED, tooltip="Экспорт в Excel", on_click=on_export_click),
+            ]
+            align = ft.CrossAxisAlignment.CENTER
+        return ft.Container(
+            ft.Column([ft.Divider(), *buttons], spacing=2, horizontal_alignment=align),
+            padding=ft.padding.only(top=8, left=8 if extended else 0, right=8 if extended else 0),
+            width=214 if extended else 72,
+        )
+
+    def rail_leading(extended: bool) -> ft.Control:
+        logo = ft.Container(ft.Icon(ft.Icons.VIEW_IN_AR, color=ft.Colors.ON_PRIMARY, size=22),
+                            bgcolor=ft.Colors.PRIMARY, border_radius=12, padding=8)
+        if not extended:
+            return ft.Container(logo, padding=ft.padding.only(top=12, bottom=12))
+        return ft.Container(
+            ft.Row([logo, ft.Column([ft.Text("Mochi", size=17, weight=ft.FontWeight.W_700),
+                                     ft.Text("заказы 3D-печати", size=11, color=ft.Colors.ON_SURFACE_VARIANT)],
+                                    spacing=0, tight=True)], spacing=10),
+            padding=ft.padding.only(left=12, top=12, bottom=12),
+        )
 
     nav_rail = ft.NavigationRail(
         selected_index=0,
         label_type=ft.NavigationRailLabelType.ALL,
-        leading=ft.Column([theme_button, export_button], spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+        min_extended_width=230,
+        group_alignment=-1.0,
         destinations=[
-            ft.NavigationRailDestination(icon=ft.Icons.LIST_ALT, label="Заказы"),
-            ft.NavigationRailDestination(icon=ft.Icons.ADD_BOX, label="Новый заказ"),
-            ft.NavigationRailDestination(icon=ft.Icons.PEOPLE, label="Клиенты"),
-            ft.NavigationRailDestination(icon=ft.Icons.SELL, label="Цены"),
-            ft.NavigationRailDestination(icon=ft.Icons.BAR_CHART, label="Статистика"),
+            ft.NavigationRailDestination(icon=ft.Icons.RECEIPT_LONG_OUTLINED, selected_icon=ft.Icons.RECEIPT_LONG,
+                                         label="Заказы"),
+            ft.NavigationRailDestination(icon=ft.Icons.ADD_BOX_OUTLINED, selected_icon=ft.Icons.ADD_BOX,
+                                         label="Новый заказ"),
+            ft.NavigationRailDestination(icon=ft.Icons.PEOPLE_OUTLINE, selected_icon=ft.Icons.PEOPLE,
+                                         label="Клиенты"),
+            ft.NavigationRailDestination(icon=ft.Icons.SELL_OUTLINED, selected_icon=ft.Icons.SELL, label="Цены"),
+            ft.NavigationRailDestination(icon=ft.Icons.INSIGHTS_OUTLINED, selected_icon=ft.Icons.INSIGHTS,
+                                         label="Статистика"),
         ],
         on_change=on_nav_change,
     )
+
+    def apply_layout(e=None) -> None:
+        """Подстраивает меню, отступы и «Клиентов» под текущую ширину окна."""
+        width = page.width or page.window.width or 1280
+        extended = width >= theme.WIDE_WIDTH
+        compact = width < theme.COMPACT_WIDTH
+        nav_rail.extended = extended
+        if extended:
+            nav_rail.label_type = ft.NavigationRailLabelType.NONE
+        elif compact:
+            nav_rail.label_type = ft.NavigationRailLabelType.SELECTED
+        else:
+            nav_rail.label_type = ft.NavigationRailLabelType.ALL
+        nav_rail.leading = rail_leading(extended)
+        nav_rail.trailing = rail_trailing(extended)
+        rail_width = 230 if extended else 80
+        side = 12 if compact else theme.content_padding(width - rail_width)
+        content.padding = ft.padding.symmetric(horizontal=side, vertical=12 if compact else 20)
+        customers_screen.set_compact(compact)
+        page.update()
+
+    page.on_resized = apply_layout
 
     def on_db_changed() -> None:
         orders_section.refresh(from_sync=True)
@@ -150,7 +211,8 @@ def main(page: ft.Page) -> None:
     sheets_sync.sync_in_background()  # таблица актуальна сразу после запуска, а не только после первой правки
     page.on_disconnect = lambda e: live_sync.stop()
 
-    page.add(ft.Row([nav_rail, ft.VerticalDivider(width=1), content], expand=True))
+    page.add(ft.Row([nav_rail, ft.VerticalDivider(width=1), content], expand=True, spacing=0))
+    apply_layout()
 
 
 if __name__ == "__main__":

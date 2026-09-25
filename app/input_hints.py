@@ -8,8 +8,8 @@ import pricing
 WEIGHT_EXAMPLES = ["454,28", "454.28", "454,28 г", "50"]
 HOURS_EXAMPLES = ["2.5", "2ч 30м", "2ч 30 мин", "2:30", "150 мин", "1д 6ч 46м"]
 
-WEIGHT_HELP = "Граммы, можно с дробью: 454,28 или 454.28"
-HOURS_HELP = "Например: 2.5 · 2ч 30м · 1д 6ч 46м (1д = 24ч)"
+WEIGHT_HELP = "Можно с дробью: 454,28"
+HOURS_HELP = "2.5 · 2ч 30м · 1д 6ч 46м"
 
 
 def _examples_menu(field: ft.TextField, examples: list[str], describe: Callable[[str], str],
@@ -29,7 +29,7 @@ def _examples_menu(field: ft.TextField, examples: list[str], describe: Callable[
 
 
 def weight_field(on_pick: Callable[[], None] | None = None, **kwargs) -> ft.TextField:
-    field = ft.TextField(label="Вес, г", helper_text=WEIGHT_HELP, **kwargs)
+    field = ft.TextField(label="Вес, г", helper_text=WEIGHT_HELP, border_radius=10, **kwargs)
     field.suffix = _examples_menu(
         field, WEIGHT_EXAMPLES,
         lambda ex: f"{ex}  →  {pricing.fmt_number(pricing.parse_weight(ex))} г", on_pick,
@@ -38,7 +38,7 @@ def weight_field(on_pick: Callable[[], None] | None = None, **kwargs) -> ft.Text
 
 
 def hours_field(on_pick: Callable[[], None] | None = None, **kwargs) -> ft.TextField:
-    field = ft.TextField(label="Часы печати", helper_text=HOURS_HELP, **kwargs)
+    field = ft.TextField(label="Часы печати", helper_text=HOURS_HELP, border_radius=10, **kwargs)
     field.suffix = _examples_menu(
         field, HOURS_EXAMPLES,
         lambda ex: f"{ex}  →  {pricing.fmt_number(pricing.parse_hours(ex))} ч", on_pick,

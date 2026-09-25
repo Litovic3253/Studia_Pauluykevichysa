@@ -5,6 +5,10 @@ from app.screens.order_detail import OrderDetailScreen
 from app.screens.prices_screen import PricesScreen
 
 
+def _texts(column):
+    return [c.value for row in column.controls for c in getattr(row, "controls", []) if hasattr(c, "value")]
+
+
 def _prices(temp_db):
     db.set_setting("materials", {"PLA": 4000})
     db.set_setting("hour_rate", 50)
@@ -23,7 +27,7 @@ def test_new_order_prefills_default_defect_and_saves_it(temp_db, monkeypatch):
     screen.weight_field.value = "100"
     screen.hours_field.value = "2"
     screen._recalc(None)
-    assert "Брак 10%" in screen.price_preview.value
+    assert "Брак 10%" in _texts(screen.breakdown_column)
 
     screen._on_save(None)
 
@@ -47,7 +51,7 @@ def test_order_detail_changing_defect_recalculates_price(temp_db, monkeypatch):
     order = db.get_order(order_id)
     assert order["defect_percent"] == 20
     assert order["price"] == 600
-    assert "Брак 20%" in screen.price_text.value
+    assert "Брак 20%" in _texts(screen.breakdown_column)
 
 
 def test_prices_screen_saves_default_defect(temp_db, monkeypatch):
@@ -56,3 +60,21 @@ def test_prices_screen_saves_default_defect(temp_db, monkeypatch):
     screen.defect_field.value = "12,5"
     screen._save_scalars(None)
     assert db.get_settings()["defect_percent"] == 12.5
+
+
+def test_order_detail_rejects_unparseable_deadline(temp_db, monkeypatch):
+    order_id = db.add_order({"client": "К", "contact": "", "cost": 0, "price": 0, "deadline": "2026-10-03"})
+    screen = OrderDetailScreen(order_id, on_back=lambda: None)
+    monkeypatch.setattr(screen, "update", lambda: None)
+    screen.refresh()
+    assert screen.deadline_field.value == "03.10.2026"
+
+    screen.deadline_field.value = "когда-нибудь"
+    screen._on_deadline_blur(None)
+
+    assert screen.deadline_field.error_text
+    assert db.get_order(order_id)["deadline"] == "2026-10-03"
+
+    screen.deadline_field.value = "25.10.2026"
+    screen._on_deadline_blur(None)
+    assert db.get_order(order_id)["deadline"] == "2026-10-25"

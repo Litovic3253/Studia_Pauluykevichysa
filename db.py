@@ -339,6 +339,22 @@ def list_orders(kind: str = "active", limit: int = 40):
         return c.execute("SELECT * FROM orders ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
 
+def count_orders() -> dict:
+    """Сколько заказов в каждом фильтре списка (для счётчиков на вкладках)."""
+    active = ",".join("?" * len(ACTIVE_STATUSES))
+    with _conn() as c:
+        row = c.execute(
+            f"""SELECT
+                COALESCE(SUM(CASE WHEN status IN ({active}) THEN 1 END), 0) AS active,
+                COALESCE(SUM(CASE WHEN paid = 0 AND status != 'cancelled' THEN 1 END), 0) AS unpaid,
+                COALESCE(SUM(CASE WHEN status IN ('delivered', 'cancelled') THEN 1 END), 0) AS done,
+                COUNT(*) AS all_
+            FROM orders""",
+            ACTIVE_STATUSES,
+        ).fetchone()
+    return {"active": row["active"], "unpaid": row["unpaid"], "done": row["done"], "all": row["all_"]}
+
+
 def list_orders_all():
     """Все заказы без ограничения — используется для экспорта/синхронизации."""
     with _conn() as c:

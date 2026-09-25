@@ -1,4 +1,5 @@
-"""Экран карточки заказа: просмотр/редактирование, статус, оплата, вложения."""
+"""Экран карточки заказа: слева клиент и параметры печати, справа статус, расчёт цены и вложения
+(на узком окне — одной колонкой)."""
 import shutil
 from pathlib import Path
 from typing import Callable
@@ -8,9 +9,12 @@ import flet as ft
 import db
 import pricing
 from paths import DATA_DIR
-from app import input_hints, theme
+from app import input_hints, price_view, theme
 
 LOCAL_STORAGE = DATA_DIR / "files_storage"
+
+FILE_ICONS = {".stl": ft.Icons.VIEW_IN_AR, ".3mf": ft.Icons.VIEW_IN_AR, ".obj": ft.Icons.VIEW_IN_AR,
+              ".png": ft.Icons.IMAGE, ".jpg": ft.Icons.IMAGE, ".jpeg": ft.Icons.IMAGE, ".pdf": ft.Icons.PICTURE_AS_PDF}
 
 
 def resolve_attachment_path(a) -> Path:
@@ -30,58 +34,66 @@ class OrderDetailScreen(ft.Column):
         self.order_id = order_id
         self.on_back = on_back
 
-        self.status_dd = ft.Dropdown(
-            label="Статус",
-            options=[ft.dropdown.Option(code, label) for code, label in db.STATUSES.items()],
+        half = {"xs": 12, "md": 6}
+        third = {"xs": 12, "sm": 6, "md": 4}
+
+        self.status_dd = theme.dropdown(
+            "Статус", width=210,
+            options=[ft.dropdown.Option(code, theme.status_style(code)[0]) for code in db.STATUSES],
             on_change=self._on_status_change,
         )
         self.paid_switch = ft.Switch(label="Оплачен", on_change=self._on_paid_change)
-        self.client_field = ft.TextField(label="Клиент", on_blur=self._on_client_blur)
-        self.contact_field = ft.TextField(label="Контакт", on_blur=self._on_client_blur)
-        self.customer_dd = ft.Dropdown(label="Привязан к клиенту", on_change=self._on_customer_change)
-        self.material_field = ft.TextField(label="Материал", on_blur=self._on_price_fields_blur)
-        self.color_field = ft.TextField(label="Цвет", on_blur=self._on_other_field_blur, value="")
+        self.client_field = theme.field("Клиент", half, on_blur=self._on_client_blur)
+        self.contact_field = theme.field("Контакт", half, on_blur=self._on_client_blur)
+        self.customer_dd = theme.dropdown("Карточка клиента", width=300, on_change=self._on_customer_change)
+        self.material_field = theme.dropdown("Материал", on_change=self._on_price_fields_blur)
+        self.color_field = theme.field("Цвет", half, on_blur=self._on_other_field_blur, value="")
         self.weight_field = input_hints.weight_field(
-            on_blur=self._on_price_fields_blur, on_pick=lambda: self._on_price_fields_blur(None)
+            on_blur=self._on_price_fields_blur, on_pick=lambda: self._on_price_fields_blur(None), col=half,
         )
         self.hours_field = input_hints.hours_field(
-            on_blur=self._on_price_fields_blur, on_pick=lambda: self._on_price_fields_blur(None)
+            on_blur=self._on_price_fields_blur, on_pick=lambda: self._on_price_fields_blur(None), col=half,
         )
-        self.qty_field = ft.TextField(label="Кол-во", on_blur=self._on_price_fields_blur)
-        self.defect_field = ft.TextField(label="Брак, %", helper_text="от цены печати",
-                                         on_blur=self._on_price_fields_blur, width=160)
-        self.deadline_field = ft.TextField(label="Срок (ГГГГ-ММ-ДД)", on_blur=self._on_deadline_blur)
-        self.price_field = ft.TextField(label="Цена (можно задать вручную)", on_blur=self._on_price_manual_blur)
-        self.notes_field = ft.TextField(label="Заметки", multiline=True, on_blur=self._on_other_field_blur)
-        self.price_text = ft.Text()
+        self.qty_field = theme.field("Кол-во, шт", third, on_blur=self._on_price_fields_blur)
+        self.defect_field = theme.field("Брак, %", third, helper_text="от цены печати",
+                                        on_blur=self._on_price_fields_blur)
+        self.deadline_field = theme.field("Срок", third, hint_text="дд.мм.гггг", helper_text="или «завтра»",
+                                          on_blur=self._on_deadline_blur)
+        self.notes_field = theme.field("Заметки", {"xs": 12}, multiline=True, min_lines=2,
+                                       on_blur=self._on_other_field_blur)
+        self.price_field = theme.field("Итоговая цена", {"xs": 12}, helper_text="Можно задать вручную",
+                                       on_blur=self._on_price_manual_blur)
+        self.breakdown_column = ft.Column(spacing=6)
+        self.manual_price_note = ft.Text("", size=12, color=ft.Colors.ORANGE_800, visible=False)
         self.attachments_column = ft.Column(spacing=4)
 
         self.file_picker = ft.FilePicker(on_result=self._on_file_picked)
-        self.status_banner = ft.Text("", color=ft.Colors.RED)
+        self.status_banner = ft.Text("", color=ft.Colors.RED, visible=False)
+        self.header = ft.Container()
 
-        self.controls = [
-            ft.Row([ft.TextButton("← К списку", on_click=lambda e: self.on_back()), self.status_banner]),
-            ft.Text(f"Заказ #{order_id}", size=20, weight=ft.FontWeight.BOLD),
-            theme.card(ft.Column([
-                ft.Row([self.status_dd, self.paid_switch]),
-                ft.Row([self.client_field, self.contact_field]),
-                self.customer_dd,
-            ], spacing=theme.SPACING)),
-            theme.card(ft.Column([
-                ft.Row([self.material_field, self.color_field]),
-                ft.Row([self.weight_field, self.hours_field, self.qty_field, self.defect_field]),
-                ft.Row([self.deadline_field, self.price_field]),
-                self.price_text,
-                self.notes_field,
-            ], spacing=theme.SPACING)),
-            theme.card(ft.Column([
-                ft.Text("Вложения", weight=ft.FontWeight.BOLD),
+        left = ft.Column([
+            theme.section("Клиент", [theme.grid([self.client_field, self.contact_field,
+                                                 theme.in_col(self.customer_dd, {"xs": 12})])],
+                          icon=ft.Icons.PERSON_OUTLINE),
+            theme.section("Печать", [theme.grid([
+                theme.in_col(self.material_field, half), self.color_field, self.weight_field, self.hours_field,
+                self.qty_field, self.defect_field, self.deadline_field, self.notes_field,
+            ])], icon=ft.Icons.PRECISION_MANUFACTURING),
+        ], spacing=theme.SPACING, col={"xs": 12, "lg": 7})
+
+        right = ft.Column([
+            theme.section("Статус и оплата", [ft.Row([self.status_dd, self.paid_switch], spacing=16, wrap=True)],
+                          icon=ft.Icons.FLAG_OUTLINED),
+            theme.section("Расчёт цены", [self.breakdown_column, self.manual_price_note,
+                                          theme.grid([self.price_field])],
+                          icon=ft.Icons.CALCULATE_OUTLINED),
+            theme.section("Вложения", [
                 self.attachments_column,
-                ft.ElevatedButton("Добавить файл", icon=ft.Icons.UPLOAD_FILE, on_click=self._on_add_file_click),
-            ], spacing=theme.SPACING)),
-            ft.OutlinedButton("Удалить заказ", icon=ft.Icons.DELETE, on_click=self._on_delete_click,
-                               style=ft.ButtonStyle(color=ft.Colors.RED)),
-        ]
+                ft.OutlinedButton("Добавить файл", icon=ft.Icons.ATTACH_FILE, on_click=self._on_add_file_click),
+            ], icon=ft.Icons.FOLDER_OPEN),
+        ], spacing=theme.SPACING, col={"xs": 12, "lg": 5})
+
+        self.controls = [self.header, self.status_banner, theme.grid([left, right])]
         self._loaded = False
 
     def did_mount(self) -> None:
@@ -100,12 +112,25 @@ class OrderDetailScreen(ft.Column):
             self.on_back()
             return
 
+        self.header.content = theme.page_header(
+            f"Заказ #{self.order_id} · {order['client']}",
+            f"создан {pricing.fmt_date(order['created_at'][:10])}",
+            [ft.OutlinedButton("Удалить заказ", icon=ft.Icons.DELETE_OUTLINE, on_click=self._on_delete_click,
+                               style=ft.ButtonStyle(color=ft.Colors.RED))],
+            leading=ft.IconButton(ft.Icons.ARROW_BACK, tooltip="К списку", on_click=lambda e: self.on_back()),
+        )
+
+        materials = list(db.get_settings()["materials"])
+        if order["material"] and order["material"] not in materials:
+            materials.append(order["material"])  # материал удалён из «Цен», но в заказе он остался
+        self.material_field.options = [ft.dropdown.Option(m) for m in materials]
+
         if not from_sync:
             # Текстовые поля коммитятся только по on_blur — при live-sync тике их
             # нельзя перезаписывать, иначе теряется незасохранённый ввод пользователя.
             self.client_field.value = order["client"] or ""
             self.contact_field.value = order["contact"] or ""
-            self.material_field.value = order["material"] or ""
+            self.material_field.value = order["material"]
             self.color_field.value = order["color"] or ""
             self.weight_field.value = pricing.fmt_number(order["weight_g"])
             self.hours_field.value = pricing.fmt_hours(order["print_hours"])
@@ -113,26 +138,30 @@ class OrderDetailScreen(ft.Column):
             input_hints.check_hours(self.hours_field)
             self.qty_field.value = str(order["qty"] or 1)
             self.defect_field.value = pricing.fmt_number(order["defect_percent"])
-            self.deadline_field.value = order["deadline"] or ""
-            self.price_field.value = str(order["price"] or 0)
+            self.deadline_field.value = pricing.fmt_date(order["deadline"]) if order["deadline"] else ""
+            self.deadline_field.error_text = None
+            self.price_field.value = pricing.fmt_number(order["price"])
             self.notes_field.value = order["notes"] or ""
 
         # Dropdown/Switch коммитятся сразу через on_change, поэтому их можно
         # безопасно обновлять и во время live-sync.
         self.status_dd.value = order["status"]
         self.paid_switch.value = bool(order["paid"])
+
         calc = pricing.calc_price(order["material"], order["weight_g"] or 0, order["print_hours"] or 0,
                                   order["qty"] or 1, bool(order["reverse_engineering"]), order["defect_percent"] or 0)
-        parts = [f"Себестоимость: {pricing.money(order['cost'])}", f"Цена: {pricing.money(order['price'])}",
-                 pricing.defect_line(order["defect_percent"], calc["defect_cost"])]
-        self.price_text.value = " · ".join(p for p in parts if p)
+        self.breakdown_column.controls = price_view.breakdown_rows(calc, order["defect_percent"] or 0,
+                                                                   total=order["price"])
+        manual = abs((order["price"] or 0) - calc["price"]) >= 1
+        self.manual_price_note.visible = manual
+        self.manual_price_note.value = f"Цена задана вручную (по расчёту — {pricing.money(calc['price'])})"
 
         customers = db.list_customers()
         self.customer_dd.options = [ft.dropdown.Option(str(c["id"]), c["name"]) for c in customers]
         self.customer_dd.value = str(order["customer_id"]) if order["customer_id"] else None
 
         self.attachments_column.controls = [self._attachment_row(a) for a in db.list_attachments(self.order_id)] or [
-            ft.Text("Вложений нет.", italic=True)
+            ft.Text("Файлов пока нет.", size=13, color=ft.Colors.ON_SURFACE_VARIANT)
         ]
 
         if self.page:
@@ -140,10 +169,17 @@ class OrderDetailScreen(ft.Column):
 
     def _attachment_row(self, a) -> ft.Control:
         label = a["filename"] or a["file_id"] or f"вложение #{a['id']}"
-        actions = [ft.IconButton(ft.Icons.DELETE, on_click=lambda e, aid=a["id"]: self._delete_attachment(aid))]
+        icon = FILE_ICONS.get(Path(label).suffix.lower(), ft.Icons.INSERT_DRIVE_FILE_OUTLINED)
+        actions = [ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip="Удалить файл",
+                                 on_click=lambda e, aid=a["id"]: self._delete_attachment(aid))]
         if a["local_path"]:
-            actions.insert(0, ft.IconButton(ft.Icons.FOLDER_OPEN, on_click=lambda e, a=a: self._open_path(str(resolve_attachment_path(a)))))
-        return ft.Row([ft.Text(f"📎 {label} ({a['source']})", expand=True), *actions])
+            actions.insert(0, ft.IconButton(ft.Icons.OPEN_IN_NEW, tooltip="Открыть",
+                                            on_click=lambda e, a=a: self._open_path(str(resolve_attachment_path(a)))))
+        return ft.Row([
+            ft.Icon(icon, size=20, color=ft.Colors.PRIMARY),
+            ft.Text(label, expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, tooltip=label),
+            *actions,
+        ], spacing=8)
 
     def _open_path(self, path: str) -> None:
         import os
@@ -152,6 +188,7 @@ class OrderDetailScreen(ft.Column):
         except OSError as exc:
             self.status_banner.color = ft.Colors.RED
             self.status_banner.value = f"Не удалось открыть файл: {exc}"
+            self.status_banner.visible = True
             self.update()
 
     def _delete_attachment(self, attachment_id: int) -> None:
@@ -194,7 +231,13 @@ class OrderDetailScreen(ft.Column):
         db.update_order(self.order_id, color=self.color_field.value, notes=self.notes_field.value)
 
     def _on_deadline_blur(self, e: ft.ControlEvent) -> None:
-        parsed = pricing.parse_date(self.deadline_field.value) or self.deadline_field.value or None
+        text = (self.deadline_field.value or "").strip()
+        parsed = pricing.parse_date(text) if text else None
+        if text and not parsed:
+            self.deadline_field.error_text = "Не понял дату. Пример: 25.10.2026 или «завтра»"
+            self.update()
+            return
+        self.deadline_field.error_text = None
         db.update_order(self.order_id, deadline=parsed)
         self.refresh()
 
@@ -231,6 +274,7 @@ class OrderDetailScreen(ft.Column):
         dialog = ft.AlertDialog(
             title=ft.Text("Удалить заказ?"),
             content=ft.Text(f"Заказ #{self.order_id} будет удалён без возможности восстановить."),
-            actions=[ft.TextButton("Отмена", on_click=cancel), ft.TextButton("Удалить", on_click=confirm)],
+            actions=[ft.TextButton("Отмена", on_click=cancel),
+                     ft.TextButton("Удалить", on_click=confirm, style=ft.ButtonStyle(color=ft.Colors.RED))],
         )
         self.page.open(dialog)
