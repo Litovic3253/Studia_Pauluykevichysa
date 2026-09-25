@@ -4,12 +4,10 @@ from pathlib import Path
 from typing import Callable
 
 import flet as ft
-import httpx
 
 import db
 import pricing
 from app import theme
-from app.telegram_files import TelegramFileError, download_file
 
 LOCAL_STORAGE = Path(__file__).resolve().parent.parent / "files_storage"
 
@@ -120,11 +118,7 @@ class OrderDetailScreen(ft.Column):
     def _attachment_row(self, a) -> ft.Control:
         label = a["filename"] or a["file_id"] or f"вложение #{a['id']}"
         actions = [ft.IconButton(ft.Icons.DELETE, on_click=lambda e, aid=a["id"]: self._delete_attachment(aid))]
-        if a["source"] == "telegram":
-            actions.insert(
-                0, ft.IconButton(ft.Icons.DOWNLOAD, on_click=lambda e, aid=a["id"]: self._download_attachment(aid))
-            )
-        else:
+        if a["local_path"]:
             actions.insert(0, ft.IconButton(ft.Icons.FOLDER_OPEN, on_click=lambda e, p=a["local_path"]: self._open_path(p)))
         return ft.Row([ft.Text(f"📎 {label} ({a['source']})", expand=True), *actions])
 
@@ -136,19 +130,6 @@ class OrderDetailScreen(ft.Column):
             self.status_banner.color = ft.Colors.RED
             self.status_banner.value = f"Не удалось открыть файл: {exc}"
             self.update()
-
-    def _download_attachment(self, attachment_id: int) -> None:
-        attachment = db.get_attachment(attachment_id)
-        try:
-            path = download_file(attachment["file_id"])
-        except (TelegramFileError, httpx.HTTPError, OSError) as exc:
-            self.status_banner.color = ft.Colors.RED
-            self.status_banner.value = str(exc)
-            self.update()
-            return
-        self.status_banner.color = None
-        self.status_banner.value = f"Скачано: {path}"
-        self.update()
 
     def _delete_attachment(self, attachment_id: int) -> None:
         db.delete_attachment(attachment_id)
