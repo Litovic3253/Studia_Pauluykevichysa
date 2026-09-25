@@ -56,3 +56,27 @@ def test_list_orders_all_returns_every_order_unordered_by_limit(temp_db):
     orders = db.list_orders_all()
     assert len(orders) == 3
     assert [o["id"] for o in orders] == sorted(o["id"] for o in orders)
+
+
+def test_default_defect_percent_setting_is_10(temp_db):
+    assert db.get_settings()["defect_percent"] == 10
+
+
+def test_orders_without_defect_percent_default_to_zero(temp_db):
+    order_id = db.add_order({"client": "К", "contact": "", "cost": 0, "price": 0})
+    assert db.get_order(order_id)["defect_percent"] == 0
+
+
+def test_init_migrates_old_orders_table_without_defect_column(temp_db):
+    import sqlite3
+    order_id = db.add_order({"client": "Старый", "contact": "", "cost": 0, "price": 500})
+    conn = sqlite3.connect(temp_db)
+    conn.execute("ALTER TABLE orders DROP COLUMN defect_percent")  # база до появления брака
+    conn.commit()
+    conn.close()
+
+    db.init()
+
+    order = db.get_order(order_id)
+    assert order["defect_percent"] == 0
+    assert order["price"] == 500

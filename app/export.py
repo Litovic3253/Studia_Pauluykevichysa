@@ -6,7 +6,7 @@ import db
 
 ORDER_COLUMNS = [
     "ID", "Клиент", "Контакт", "Описание", "Материал", "Цвет", "Вес, г",
-    "Часы печати", "Кол-во", "Срок", "Статус", "Оплачен", "Себестоимость",
+    "Часы печати", "Кол-во", "Брак, %", "Срок", "Статус", "Оплачен", "Себестоимость",
     "Цена", "Заметки", "Создан",
 ]
 
@@ -26,6 +26,7 @@ def build_orders_sheet() -> list[list[Any]]:
             o["weight_g"] or 0,
             o["print_hours"] or 0,
             o["qty"] or 1,
+            o["defect_percent"] or 0,
             o["deadline"] or "",
             db.STATUSES.get(o["status"], o["status"]),
             "Да" if o["paid"] else "Нет",

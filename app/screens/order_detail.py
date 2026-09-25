@@ -48,6 +48,8 @@ class OrderDetailScreen(ft.Column):
             on_blur=self._on_price_fields_blur, on_pick=lambda: self._on_price_fields_blur(None)
         )
         self.qty_field = ft.TextField(label="Кол-во", on_blur=self._on_price_fields_blur)
+        self.defect_field = ft.TextField(label="Брак, %", helper_text="от цены печати",
+                                         on_blur=self._on_price_fields_blur, width=160)
         self.deadline_field = ft.TextField(label="Срок (ГГГГ-ММ-ДД)", on_blur=self._on_deadline_blur)
         self.price_field = ft.TextField(label="Цена (можно задать вручную)", on_blur=self._on_price_manual_blur)
         self.notes_field = ft.TextField(label="Заметки", multiline=True, on_blur=self._on_other_field_blur)
@@ -67,7 +69,7 @@ class OrderDetailScreen(ft.Column):
             ], spacing=theme.SPACING)),
             theme.card(ft.Column([
                 ft.Row([self.material_field, self.color_field]),
-                ft.Row([self.weight_field, self.hours_field, self.qty_field]),
+                ft.Row([self.weight_field, self.hours_field, self.qty_field, self.defect_field]),
                 ft.Row([self.deadline_field, self.price_field]),
                 self.price_text,
                 self.notes_field,
@@ -110,6 +112,7 @@ class OrderDetailScreen(ft.Column):
             input_hints.check_weight(self.weight_field)
             input_hints.check_hours(self.hours_field)
             self.qty_field.value = str(order["qty"] or 1)
+            self.defect_field.value = pricing.fmt_number(order["defect_percent"])
             self.deadline_field.value = order["deadline"] or ""
             self.price_field.value = str(order["price"] or 0)
             self.notes_field.value = order["notes"] or ""
@@ -118,9 +121,11 @@ class OrderDetailScreen(ft.Column):
         # безопасно обновлять и во время live-sync.
         self.status_dd.value = order["status"]
         self.paid_switch.value = bool(order["paid"])
-        self.price_text.value = (
-            f"Себестоимость: {pricing.money(order['cost'])} · Цена: {pricing.money(order['price'])}"
-        )
+        calc = pricing.calc_price(order["material"], order["weight_g"] or 0, order["print_hours"] or 0,
+                                  order["qty"] or 1, bool(order["reverse_engineering"]), order["defect_percent"] or 0)
+        parts = [f"Себестоимость: {pricing.money(order['cost'])}", f"Цена: {pricing.money(order['price'])}",
+                 pricing.defect_line(order["defect_percent"], calc["defect_cost"])]
+        self.price_text.value = " · ".join(p for p in parts if p)
 
         customers = db.list_customers()
         self.customer_dd.options = [ft.dropdown.Option(str(c["id"]), c["name"]) for c in customers]
@@ -206,9 +211,10 @@ class OrderDetailScreen(ft.Column):
             self.update()  # показать ошибку у поля; в базу неразобранное значение не пишем
             return
         qty = int(pricing.parse_number(self.qty_field.value) or 1)
+        defect = pricing.parse_number(self.defect_field.value) or 0
         db.update_order(
             self.order_id, material=self.material_field.value, weight_g=weight,
-            print_hours=hours, qty=qty,
+            print_hours=hours, qty=qty, defect_percent=defect,
         )
         pricing.recalc_order_price(self.order_id)
         self.refresh()

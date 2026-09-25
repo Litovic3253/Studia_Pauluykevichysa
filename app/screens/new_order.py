@@ -30,6 +30,10 @@ class NewOrderScreen(ft.Column):
             value="0", on_change=self._recalc, on_pick=lambda: self._recalc(None)
         )
         self.qty_field = ft.TextField(label="Кол-во", value="1", on_change=self._recalc)
+        self.defect_field = ft.TextField(
+            label="Брак, %", value=pricing.fmt_number(db.get_settings()["defect_percent"]),
+            helper_text="от цены печати", on_change=self._recalc, width=160,
+        )
         self.deadline_field = ft.TextField(label="Срок (сегодня / завтра / 25.09)")
         self.reverse_checkbox = ft.Checkbox(label="Реверс-моделирование (нет STL)", on_change=self._recalc)
         self.price_preview = ft.Text()
@@ -46,7 +50,7 @@ class NewOrderScreen(ft.Column):
             ], spacing=theme.SPACING)),
             theme.card(ft.Column([
                 ft.Row([self.material_dd, self.color_field]),
-                ft.Row([self.weight_field, self.hours_field, self.qty_field]),
+                ft.Row([self.weight_field, self.hours_field, self.qty_field, self.defect_field]),
                 ft.Row([self.deadline_field, self.reverse_checkbox]),
                 self.price_preview,
                 self.custom_price_field,
@@ -63,6 +67,9 @@ class NewOrderScreen(ft.Column):
             self.page.overlay.append(self.file_picker)
         settings = db.get_settings()
         self.material_dd.options = [ft.dropdown.Option(m) for m in settings["materials"]]
+        if not self._picked_files and not (self.client_field.value or "").strip():
+            # Пустая форма — подхватить процент брака, если его поменяли в «Ценах».
+            self.defect_field.value = pricing.fmt_number(settings["defect_percent"])
         self.page.update()
         self._recalc(None)
 
@@ -79,10 +86,13 @@ class NewOrderScreen(ft.Column):
         weight = input_hints.check_weight(self.weight_field) or 0
         hours = input_hints.check_hours(self.hours_field) or 0
         qty = int(pricing.parse_number(self.qty_field.value) or 1)
+        defect = pricing.parse_number(self.defect_field.value) or 0
         result = pricing.calc_price(
-            self.material_dd.value, weight, hours, qty, bool(self.reverse_checkbox.value)
+            self.material_dd.value, weight, hours, qty, bool(self.reverse_checkbox.value), defect
         )
-        self.price_preview.value = f"Расчётная цена: {pricing.money(result['price'])}"
+        parts = [f"Расчётная цена: {pricing.money(result['price'])}",
+                 pricing.defect_line(defect, result["defect_cost"])]
+        self.price_preview.value = "  ·  ".join(p for p in parts if p)
         if self.page:
             self.update()
 
@@ -100,7 +110,8 @@ class NewOrderScreen(ft.Column):
             return
         qty = int(pricing.parse_number(self.qty_field.value) or 1)
         reverse = bool(self.reverse_checkbox.value)
-        calc = pricing.calc_price(self.material_dd.value, weight, hours, qty, reverse)
+        defect = pricing.parse_number(self.defect_field.value) or 0
+        calc = pricing.calc_price(self.material_dd.value, weight, hours, qty, reverse, defect)
         custom_price = pricing.parse_number(self.custom_price_field.value)
         price = custom_price if custom_price is not None else calc["price"]
 
@@ -118,6 +129,7 @@ class NewOrderScreen(ft.Column):
             "price": price,
             "notes": "",
             "reverse_engineering": 1 if reverse else 0,
+            "defect_percent": defect,
         })
 
         dest_dir = LOCAL_STORAGE / str(order_id)
@@ -138,6 +150,7 @@ class NewOrderScreen(ft.Column):
         self.weight_field.value = "0"
         self.hours_field.value = "0"
         self.qty_field.value = "1"
+        self.defect_field.value = pricing.fmt_number(db.get_settings()["defect_percent"])
         self.deadline_field.value = ""
         self.reverse_checkbox.value = False
         self.custom_price_field.value = ""

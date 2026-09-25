@@ -119,3 +119,40 @@ def test_fmt_number_uses_comma_decimal():
 
 def test_fmt_number_never_uses_exponent():
     assert pricing.fmt_number(1234567.5) == "1234567,5"
+
+
+def test_calc_price_adds_defect_percent_of_print_cost(temp_db):
+    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("hour_rate", 50)
+    # материал 100 г × 4000/кг = 400, время 2 ч × 50 = 100 → печать 500
+    result = pricing.calc_price("PLA", weight_g=100, hours=2, qty=1, defect_percent=10)
+    assert result["defect_cost"] == 50
+    assert result["cost"] == 550
+    assert result["price"] == 550
+
+
+def test_calc_price_defect_not_applied_to_reverse_modeling(temp_db):
+    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("hour_rate", 50)
+    db.set_setting("reverse_price", 1000)
+    result = pricing.calc_price("PLA", weight_g=100, hours=2, qty=1, reverse=True, defect_percent=10)
+    assert result["defect_cost"] == 50
+    assert result["price"] == 550 + 1000
+
+
+def test_calc_price_defaults_to_zero_defect(temp_db):
+    db.set_setting("materials", {"PLA": 4000})
+    result = pricing.calc_price("PLA", weight_g=100, hours=0, qty=1)
+    assert result["defect_cost"] == 0
+    assert result["price"] == 400
+
+
+def test_recalc_order_price_uses_orders_defect_percent(temp_db):
+    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("hour_rate", 50)
+    order_id = db.add_order({"client": "К", "contact": "", "material": "PLA", "weight_g": 100,
+                              "print_hours": 2, "qty": 1, "cost": 0, "price": 0, "defect_percent": 20})
+    pricing.recalc_order_price(order_id)
+    order = db.get_order(order_id)
+    assert order["defect_percent"] == 20
+    assert order["price"] == 600

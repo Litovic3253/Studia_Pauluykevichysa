@@ -61,3 +61,9 @@ def test_build_all_sheets_returns_all_three_named_sheets(temp_db):
     assert set(sheets.keys()) == {"Заказы", "Клиенты", "Цены"}
     for rows in sheets.values():
         assert len(rows) >= 1  # хотя бы заголовок
+
+
+def test_build_orders_sheet_includes_defect_percent(temp_db):
+    db.add_order({"client": "К", "contact": "", "cost": 0, "price": 0, "defect_percent": 15})
+    rows = export.build_orders_sheet()
+    assert rows[1][rows[0].index("Брак, %")] == 15

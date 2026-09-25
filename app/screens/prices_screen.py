@@ -15,6 +15,10 @@ class PricesScreen(ft.Column):
         self.hour_rate_field = ft.TextField(label="Ставка часа печати", on_blur=self._save_scalars)
         self.reverse_price_field = ft.TextField(label="Реверс-моделирование", on_blur=self._save_scalars)
         self.currency_field = ft.TextField(label="Валюта", on_blur=self._save_scalars)
+        self.defect_field = ft.TextField(
+            label="Процент брака по умолчанию, %", on_blur=self._save_scalars,
+            helper_text="Подставляется в новые заказы; в каждом заказе можно поменять",
+        )
         self.status_text = ft.Text("")
 
         self.controls = [
@@ -28,6 +32,7 @@ class PricesScreen(ft.Column):
             theme.card(ft.Column([
                 self.hour_rate_field,
                 self.reverse_price_field,
+                self.defect_field,
                 self.currency_field,
             ], spacing=theme.SPACING)),
             self.status_text,
@@ -41,6 +46,7 @@ class PricesScreen(ft.Column):
         ] or [ft.Text("Материалов нет.", italic=True)]
         self.hour_rate_field.value = str(settings["hour_rate"])
         self.reverse_price_field.value = str(settings["reverse_price"])
+        self.defect_field.value = pricing.fmt_number(settings["defect_percent"])
         self.currency_field.value = settings["currency"]
         if self.page:
             self.update()
@@ -89,6 +95,9 @@ class PricesScreen(ft.Column):
             db.set_setting("hour_rate", hour_rate)
         if reverse_price is not None:
             db.set_setting("reverse_price", reverse_price)
+        defect = pricing.parse_number(self.defect_field.value)
+        if defect is not None:
+            db.set_setting("defect_percent", defect)
         if self.currency_field.value:
             db.set_setting("currency", self.currency_field.value.strip())
         self.status_text.value = "Настройки сохранены."

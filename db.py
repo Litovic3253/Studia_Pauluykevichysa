@@ -26,6 +26,7 @@ DEFAULT_SETTINGS = {
     "hour_rate": 50,        # ₽ за час печати
     "reverse_price": 1000,  # ₽ за реверс-моделирование, если нет STL у заказчика
     "currency": "₽",
+    "defect_percent": 10,   # % брака по умолчанию — подставляется в новые заказы
     "owners": [],        # telegram id владельцев (если ADMIN_IDS не задан в .env)
     "reminder_hour": 9,  # во сколько присылать сводку по дедлайнам
     "last_reminder": "",
@@ -73,6 +74,9 @@ def init() -> None:
         cols = {r["name"] for r in c.execute("PRAGMA table_info(orders)")}
         if "reverse_engineering" not in cols:
             c.execute("ALTER TABLE orders ADD COLUMN reverse_engineering INTEGER DEFAULT 0")
+        if "defect_percent" not in cols:
+            # Старые заказы — 0%, чтобы их цены не поменялись сами.
+            c.execute("ALTER TABLE orders ADD COLUMN defect_percent REAL DEFAULT 0")
         if "updated_at" not in cols:
             c.execute("ALTER TABLE orders ADD COLUMN updated_at TEXT")
             c.execute("UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL")
@@ -278,11 +282,12 @@ def add_order(data: dict) -> int:
     fields = [
         "client", "contact", "description", "file_id", "file_type", "material", "color",
         "weight_g", "print_hours", "qty", "deadline", "cost", "price", "notes",
-        "reverse_engineering", "customer_id",
+        "reverse_engineering", "customer_id", "defect_percent",
     ]
     data = dict(data)
     if not data.get("customer_id") and data.get("client"):
         data["customer_id"] = find_or_create_customer(data["client"], data.get("contact"))
+    data.setdefault("defect_percent", 0)
     values = [data.get(f) for f in fields]
     with _conn() as c:
         now = datetime.now().isoformat(timespec="seconds")

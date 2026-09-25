@@ -111,18 +111,28 @@ def deadline_mark(order) -> str:
     return f"через {days} дн."
 
 
-def calc_price(material: str | None, weight_g: float, hours: float, qty: int, reverse: bool = False) -> dict:
+def calc_price(material: str | None, weight_g: float, hours: float, qty: int, reverse: bool = False,
+               defect_percent: float = 0) -> dict:
+    """Брак — надбавка в % от стоимости печати (материал + время); на реверс-моделирование не начисляется."""
     s = db.get_settings()
     per_kg = s["materials"].get(material or "", 0)
     material_cost = weight_g * qty * per_kg / 1000
     time_cost = hours * qty * s["hour_rate"]
+    defect_cost = (material_cost + time_cost) * (defect_percent or 0) / 100
     reverse_cost = s["reverse_price"] if reverse else 0
-    cost = material_cost + time_cost
+    cost = material_cost + time_cost + defect_cost
     price = cost + reverse_cost
     return {
-        "material_cost": material_cost, "time_cost": time_cost,
+        "material_cost": material_cost, "time_cost": time_cost, "defect_cost": defect_cost,
         "reverse_cost": reverse_cost, "cost": cost, "price": price,
     }
+
+
+def defect_line(defect_percent: float, defect_cost: float) -> str:
+    """«Брак 10%: +100 ₽» — пустая строка, если брак 0%."""
+    if not defect_percent:
+        return ""
+    return f"Брак {fmt_number(defect_percent)}%: +{money(defect_cost)}"
 
 
 def price_breakdown(material, weight_g, hours, qty, reverse: bool = False) -> str:
@@ -140,5 +150,6 @@ def price_breakdown(material, weight_g, hours, qty, reverse: bool = False) -> st
 
 def recalc_order_price(oid: int) -> None:
     o = db.get_order(oid)
-    p = calc_price(o["material"], o["weight_g"], o["print_hours"], o["qty"], bool(o["reverse_engineering"]))
+    p = calc_price(o["material"], o["weight_g"], o["print_hours"], o["qty"], bool(o["reverse_engineering"]),
+                   o["defect_percent"] or 0)
     db.update_order(oid, cost=round(p["cost"], 2), price=p["price"])
