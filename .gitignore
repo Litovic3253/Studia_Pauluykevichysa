@@ -8,3 +8,5 @@ app/files_cache/
 app/files_storage/
 .pytest_cache/
 .claude/
+google-service-account.json
+*service-account*.json

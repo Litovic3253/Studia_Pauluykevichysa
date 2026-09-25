@@ -403,9 +403,16 @@ def change_fingerprint() -> tuple:
             "(SELECT COALESCE(MAX(id), 0) FROM orders) AS max_order_id, "
             "(SELECT COALESCE(MAX(updated_at), '') FROM orders) AS max_updated_at, "
             "(SELECT COUNT(*) FROM customers) AS customers_count, "
-            "(SELECT COUNT(*) FROM attachments) AS attachments_count"
+            "(SELECT COUNT(*) FROM attachments) AS attachments_count, "
+            # Цены и карточки клиентов не имеют updated_at — берём их содержимое целиком
+            # (десятки строк). theme_mode исключён: смена темы — не изменение данных.
+            "(SELECT group_concat(key || '=' || value, ';') FROM "
+            "(SELECT key, value FROM settings WHERE key != 'theme_mode' ORDER BY key)) AS settings_sig, "
+            "(SELECT group_concat(id || '|' || name || '|' || COALESCE(contact, '') || '|' "
+            "|| COALESCE(notes, ''), ';') FROM (SELECT * FROM customers ORDER BY id)) AS customers_sig"
         ).fetchone()
     return (
         row["orders_count"], row["max_order_id"], row["max_updated_at"],
         row["customers_count"], row["attachments_count"],
+        row["settings_sig"], row["customers_sig"],
     )

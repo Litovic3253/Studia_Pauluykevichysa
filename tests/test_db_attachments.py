@@ -71,3 +71,22 @@ def test_change_fingerprint_changes_on_order_update(temp_db):
     db.update_order(order_id, status="printing", paid=1)
     after = db.change_fingerprint()
     assert before != after
+
+
+def test_change_fingerprint_changes_on_price_setting(temp_db):
+    before = db.change_fingerprint()
+    db.set_setting("hour_rate", 999)
+    assert db.change_fingerprint() != before
+
+
+def test_change_fingerprint_ignores_theme_mode(temp_db):
+    before = db.change_fingerprint()
+    db.set_setting("theme_mode", "dark")
+    assert db.change_fingerprint() == before
+
+
+def test_change_fingerprint_changes_on_customer_notes_edit(temp_db):
+    customer_id = db.find_or_create_customer("Иван", "@ivan")
+    before = db.change_fingerprint()
+    db.update_customer(customer_id, notes="постоянный клиент")
+    assert db.change_fingerprint() != before

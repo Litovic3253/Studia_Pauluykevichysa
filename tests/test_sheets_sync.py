@@ -108,3 +108,54 @@ def test_sync_in_background_does_nothing_when_not_configured(monkeypatch, temp_d
     time.sleep(0.2)  # дать фоновому потоку шанс запуститься, если бы он был запущен
 
     assert called == []
+
+
+def test_relative_key_path_resolves_against_app_dir(monkeypatch, tmp_path):
+    app_dir = tmp_path / "app_dir"
+    other_dir = tmp_path / "elsewhere"
+    app_dir.mkdir()
+    other_dir.mkdir()
+    monkeypatch.setattr(sheets_sync, "_BASE_DIR", app_dir)
+    monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_FILE", "key.json")
+    monkeypatch.chdir(other_dir)
+
+    assert sheets_sync._key_path() == app_dir / "key.json"
+
+
+def test_sync_in_background_never_overlaps_and_reruns_latest(monkeypatch, tmp_path):
+    import threading
+    import time
+
+    key_file = tmp_path / "key.json"
+    key_file.write_text("{}")
+    monkeypatch.setenv("GOOGLE_SHEET_ID", "abc123")
+    monkeypatch.setenv("GOOGLE_SERVICE_ACCOUNT_FILE", str(key_file))
+
+    active = 0
+    max_active = 0
+    calls = 0
+    lock = threading.Lock()
+
+    def slow_sync():
+        nonlocal active, max_active, calls
+        with lock:
+            active += 1
+            calls += 1
+            max_active = max(max_active, active)
+        time.sleep(0.2)
+        with lock:
+            active -= 1
+
+    monkeypatch.setattr(sheets_sync, "sync_now", slow_sync)
+
+    for _ in range(5):
+        sheets_sync.sync_in_background()
+        time.sleep(0.02)
+
+    deadline = time.time() + 3
+    while time.time() < deadline and (calls < 2 or active):
+        time.sleep(0.05)
+    time.sleep(0.3)
+
+    assert max_active == 1
+    assert calls == 2  # первый запуск + один повтор, покрывающий все изменения за время первого

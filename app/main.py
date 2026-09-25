@@ -102,8 +102,8 @@ def main(page: ft.Page) -> None:
         if not e.path:
             return
         try:
-            export_to_excel(e.path)
-            page.open(ft.SnackBar(ft.Text(f"Экспортировано: {e.path}")))
+            saved_path = export_to_excel(e.path)
+            page.open(ft.SnackBar(ft.Text(f"Экспортировано: {saved_path}")))
         except Exception as exc:  # noqa: BLE001 - любая ошибка записи файла должна дойти до пользователя
             page.open(ft.SnackBar(ft.Text(f"Ошибка экспорта: {exc}"), bgcolor=ft.Colors.RED))
 
@@ -146,6 +146,7 @@ def main(page: ft.Page) -> None:
     page.pubsub.subscribe(lambda _: on_db_changed())
     live_sync = LiveSync(on_change=lambda: page.pubsub.send_all("db_changed"), interval=3.0)
     live_sync.start()
+    sheets_sync.sync_in_background()  # таблица актуальна сразу после запуска, а не только после первой правки
     page.on_disconnect = lambda e: live_sync.stop()
 
     page.add(ft.Row([nav_rail, ft.VerticalDivider(width=1), content], expand=True))

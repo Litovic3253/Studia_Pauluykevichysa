@@ -8,6 +8,13 @@ from typing import Callable
 from app.export import build_all_sheets
 
 _SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+# Папка приложения (там же лежит .env) — относительный путь к ключу считается от неё,
+# а не от текущей рабочей папки.
+_BASE_DIR = Path(__file__).resolve().parent.parent
+
+_state_lock = threading.Lock()
+_pending = False
+_running = False
 
 
 class SheetsSyncError(RuntimeError):
@@ -20,14 +27,22 @@ def is_configured() -> bool:
     )
 
 
+def _key_path() -> Path | None:
+    raw = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "").strip()
+    if not raw:
+        return None
+    path = Path(raw)
+    return path if path.is_absolute() else _BASE_DIR / path
+
+
 def _build_service():
     from google.oauth2.service_account import Credentials
     from googleapiclient.discovery import build
 
-    key_path = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "").strip()
-    if not key_path or not Path(key_path).exists():
-        raise SheetsSyncError(f"Файл служебного аккаунта не найден: {key_path!r}")
-    creds = Credentials.from_service_account_file(key_path, scopes=_SCOPES)
+    key_path = _key_path()
+    if key_path is None or not key_path.exists():
+        raise SheetsSyncError(f"Файл служебного аккаунта не найден: {str(key_path or '')!r}")
+    creds = Credentials.from_service_account_file(str(key_path), scopes=_SCOPES)
     return build("sheets", "v4", credentials=creds)
 
 
@@ -62,16 +77,34 @@ def sync_now() -> None:
 
 
 def sync_in_background(on_error: Callable[[Exception], None] | None = None) -> None:
-    """Запускает sync_now() в отдельном потоке, если синхронизация настроена; иначе ничего не делает."""
+    """Запускает sync_now() в отдельном потоке, если синхронизация настроена; иначе ничего не делает.
+
+    Одновременно идёт не больше одной синхронизации: вызовы во время работы только
+    помечают данные «грязными», и по окончании выполняется ровно один повтор —
+    иначе параллельные clear/update могли бы перемешаться и оставить в листе старые строки.
+    """
+    global _pending, _running
     if not is_configured():
         return
+    with _state_lock:
+        _pending = True
+        if _running:
+            return
+        _running = True
 
     def _run() -> None:
-        try:
-            sync_now()
-        except SheetsSyncError as exc:
-            logging.warning("Синхронизация с Google Таблицами не удалась: %s", exc)
-            if on_error:
-                on_error(exc)
+        global _pending, _running
+        while True:
+            with _state_lock:
+                if not _pending:
+                    _running = False
+                    return
+                _pending = False
+            try:
+                sync_now()
+            except Exception as exc:  # noqa: BLE001 - поток не должен умереть с _running=True
+                logging.warning("Синхронизация с Google Таблицами не удалась: %s", exc)
+                if on_error:
+                    on_error(exc)
 
     threading.Thread(target=_run, daemon=True).start()
