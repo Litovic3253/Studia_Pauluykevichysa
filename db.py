@@ -104,6 +104,26 @@ def init() -> None:
             )"""
         )
         c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS spools (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plastic TEXT NOT NULL,
+                color TEXT,
+                initial_g REAL NOT NULL,
+                archived INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
+            )"""
+        )
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS spool_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                spool_id INTEGER NOT NULL REFERENCES spools(id),
+                grams REAL NOT NULL,
+                order_id INTEGER,
+                note TEXT,
+                created_at TEXT NOT NULL
+            )"""
+        )
         for key, value in DEFAULT_SETTINGS.items():
             c.execute(
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
@@ -409,6 +429,109 @@ def stats() -> dict:
     }
 
 
+# ---------- катушки пластика ----------
+
+_SPOOL_SELECT = (
+    "SELECT s.*, s.initial_g - COALESCE((SELECT SUM(grams) FROM spool_usage u WHERE u.spool_id = s.id), 0) "
+    "AS remaining_g FROM spools s"
+)
+
+
+def add_spool(plastic: str, color: str | None, initial_g: float) -> int:
+    if not plastic or not initial_g or initial_g <= 0:
+        raise ValueError("Укажите пластик и вес катушки больше нуля")
+    with _conn() as c:
+        return c.execute(
+            "INSERT INTO spools (plastic, color, initial_g, created_at) VALUES (?, ?, ?, ?)",
+            (plastic, (color or "").strip(), initial_g, datetime.now().isoformat(timespec="seconds")),
+        ).lastrowid
+
+
+def get_spool(spool_id: int):
+    with _conn() as c:
+        return c.execute(f"{_SPOOL_SELECT} WHERE s.id = ?", (spool_id,)).fetchone()
+
+
+def list_spools(include_archived: bool = False):
+    where = "" if include_archived else "WHERE s.archived = 0"
+    with _conn() as c:
+        return c.execute(f"{_SPOOL_SELECT} {where} ORDER BY s.plastic, s.id").fetchall()
+
+
+def use_spool(spool_id: int, grams: float, order_id: int | None = None, note: str = "") -> int:
+    """Списывает граммы с катушки. Один заказ списывается только один раз."""
+    if grams is None or grams <= 0:
+        raise ValueError("Количество граммов должно быть больше нуля")
+    if order_id is not None and order_usage(order_id) is not None:
+        raise ValueError(f"Пластик для заказа #{order_id} уже списан")
+    with _conn() as c:
+        return c.execute(
+            "INSERT INTO spool_usage (spool_id, grams, order_id, note, created_at) VALUES (?, ?, ?, ?, ?)",
+            (spool_id, grams, order_id, note, datetime.now().isoformat(timespec="seconds")),
+        ).lastrowid
+
+
+def set_spool_remaining(spool_id: int, remaining_g: float) -> None:
+    """Сверка после взвешивания: разница записывается отдельной строкой (может быть и «минус списание»)."""
+    diff = get_spool(spool_id)["remaining_g"] - remaining_g
+    if abs(diff) < 1e-9:
+        return
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO spool_usage (spool_id, grams, note, created_at) VALUES (?, ?, ?, ?)",
+            (spool_id, diff, "сверка остатка", datetime.now().isoformat(timespec="seconds")),
+        )
+
+
+def archive_spool(spool_id: int, archived: bool = True) -> None:
+    with _conn() as c:
+        c.execute("UPDATE spools SET archived = ? WHERE id = ?", (1 if archived else 0, spool_id))
+
+
+def delete_spool(spool_id: int) -> None:
+    with _conn() as c:
+        c.execute("DELETE FROM spool_usage WHERE spool_id = ?", (spool_id,))
+        c.execute("DELETE FROM spools WHERE id = ?", (spool_id,))
+
+
+def list_usage(limit: int = 30):
+    with _conn() as c:
+        return c.execute(
+            "SELECT u.*, s.plastic, s.color FROM spool_usage u JOIN spools s ON s.id = u.spool_id "
+            "ORDER BY u.id DESC LIMIT ?", (limit,),
+        ).fetchall()
+
+
+def undo_usage(usage_id: int) -> None:
+    with _conn() as c:
+        c.execute("DELETE FROM spool_usage WHERE id = ?", (usage_id,))
+
+
+def order_usage(order_id: int):
+    with _conn() as c:
+        return c.execute(
+            "SELECT u.*, s.plastic, s.color FROM spool_usage u JOIN spools s ON s.id = u.spool_id "
+            "WHERE u.order_id = ?", (order_id,),
+        ).fetchone()
+
+
+def stock_by_plastic() -> dict:
+    """{пластик: {"remaining_g": остаток по активным катушкам, "spools": сколько катушек}}."""
+    stock: dict = {}
+    for sp in list_spools():
+        entry = stock.setdefault(sp["plastic"], {"remaining_g": 0, "spools": 0})
+        entry["remaining_g"] += max(sp["remaining_g"], 0)
+        entry["spools"] += 1
+    return stock
+
+
+def spool_totals() -> dict:
+    spools = list_spools()
+    loaded = sum(sp["initial_g"] for sp in spools)
+    remaining = sum(max(sp["remaining_g"], 0) for sp in spools)
+    return {"loaded_g": loaded, "used_g": loaded - remaining, "remaining_g": remaining, "spools": len(spools)}
+
+
 # ---------- вложения ----------
 
 def add_attachment(order_id: int, source: str, *, file_id: str | None = None,
@@ -458,10 +581,13 @@ def change_fingerprint() -> tuple:
             "(SELECT group_concat(key || '=' || value, ';') FROM "
             "(SELECT key, value FROM settings WHERE key != 'theme_mode' ORDER BY key)) AS settings_sig, "
             "(SELECT group_concat(id || '|' || name || '|' || COALESCE(contact, '') || '|' "
-            "|| COALESCE(notes, ''), ';') FROM (SELECT * FROM customers ORDER BY id)) AS customers_sig"
+            "|| COALESCE(notes, ''), ';') FROM (SELECT * FROM customers ORDER BY id)) AS customers_sig, "
+            "(SELECT COUNT(*) || ':' || COALESCE(SUM(archived), 0) FROM spools) AS spools_sig, "
+            "(SELECT COUNT(*) || ':' || COALESCE(MAX(id), 0) || ':' || COALESCE(SUM(grams), 0) "
+            "FROM spool_usage) AS usage_sig"
         ).fetchone()
     return (
         row["orders_count"], row["max_order_id"], row["max_updated_at"],
         row["customers_count"], row["attachments_count"],
-        row["settings_sig"], row["customers_sig"],
+        row["settings_sig"], row["customers_sig"], row["spools_sig"], row["usage_sig"],
     )

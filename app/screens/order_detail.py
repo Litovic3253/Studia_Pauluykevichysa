@@ -9,7 +9,8 @@ import flet as ft
 import db
 import pricing
 from paths import DATA_DIR
-from app import input_hints, price_view, theme
+from app import input_hints, plastics, price_view, theme
+from app.dialogs import grams_dialog
 
 LOCAL_STORAGE = DATA_DIR / "files_storage"
 
@@ -66,6 +67,7 @@ class OrderDetailScreen(ft.Column):
         self.breakdown_column = ft.Column(spacing=6)
         self.manual_price_note = ft.Text("", size=12, color=ft.Colors.ORANGE_800, visible=False)
         self.attachments_column = ft.Column(spacing=4)
+        self.usage_row = ft.Row(spacing=8, wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
         self.file_picker = ft.FilePicker(on_result=self._on_file_picked)
         self.status_banner = ft.Text("", color=ft.Colors.RED, visible=False)
@@ -78,7 +80,7 @@ class OrderDetailScreen(ft.Column):
             theme.section("Печать", [theme.grid([
                 theme.in_col(self.material_field, half), self.color_field, self.weight_field, self.hours_field,
                 self.qty_field, self.defect_field, self.deadline_field, self.notes_field,
-            ])], icon=ft.Icons.PRECISION_MANUFACTURING),
+            ]), ft.Divider(height=4), self.usage_row], icon=ft.Icons.PRECISION_MANUFACTURING),
         ], spacing=theme.SPACING, col={"xs": 12, "lg": 7})
 
         right = ft.Column([
@@ -160,12 +162,74 @@ class OrderDetailScreen(ft.Column):
         self.customer_dd.options = [ft.dropdown.Option(str(c["id"]), c["name"]) for c in customers]
         self.customer_dd.value = str(order["customer_id"]) if order["customer_id"] else None
 
+        self._render_usage(order)
+
         self.attachments_column.controls = [self._attachment_row(a) for a in db.list_attachments(self.order_id)] or [
             ft.Text("Файлов пока нет.", size=13, color=ft.Colors.ON_SURFACE_VARIANT)
         ]
 
         if self.page:
             self.update()
+
+    # ---------- списание пластика ----------
+
+    def _render_usage(self, order) -> None:
+        usage = db.order_usage(self.order_id)
+        if usage:
+            where = usage["plastic"] + (f" · {usage['color']}" if usage["color"] else "")
+            self.usage_row.controls = [
+                theme.pill(f"Списано {pricing.fmt_number(usage['grams'])} г с {where}", ft.Colors.GREEN,
+                           ft.Icons.CHECK_CIRCLE),
+                ft.TextButton("Отменить списание", icon=ft.Icons.UNDO,
+                              on_click=lambda e, uid=usage["id"]: self._undo_usage(uid)),
+            ]
+        else:
+            planned = (order["weight_g"] or 0) * (order["qty"] or 1)
+            self.usage_row.controls = [
+                ft.Text(f"Пластик для заказа: {pricing.fmt_number(planned)} г", size=13,
+                        color=ft.Colors.ON_SURFACE_VARIANT, expand=True),
+                ft.FilledTonalButton("Списать пластик", icon=ft.Icons.REMOVE_CIRCLE_OUTLINE,
+                                     on_click=lambda e: self._ask_write_off()),
+            ]
+
+    def spools_for_order(self) -> list:
+        """Активные катушки с остатком; подходящие к материалу заказа — первыми."""
+        order = db.get_order(self.order_id)
+        family = plastics.family(order["material"])
+        spools = [s for s in db.list_spools() if s["remaining_g"] > 0]
+        return sorted(spools, key=lambda s: (plastics.family(s["plastic"]) != family, s["plastic"], s["id"]))
+
+    def _ask_write_off(self) -> None:
+        spools = self.spools_for_order()
+        if not spools:
+            self.page.open(ft.SnackBar(ft.Text("Нет катушек с остатком — добавьте катушку в «Калькуляторе пластика».")))
+            return
+        order = db.get_order(self.order_id)
+        spool_dd = theme.dropdown("Катушка", width=380, value=str(spools[0]["id"]), options=[
+            ft.dropdown.Option(str(s["id"]), f"{s['plastic']}{' · ' + s['color'] if s['color'] else ''}"
+                                             f" — осталось {pricing.fmt_number(s['remaining_g'])} г")
+            for s in spools
+        ])
+        planned = (order["weight_g"] or 0) * (order["qty"] or 1)
+
+        def ok(grams: float) -> None:
+            self.write_off(int(spool_dd.value), grams)
+
+        grams_dialog(self.page, f"Списать пластик · заказ #{self.order_id}", "Сколько граммов",
+                     pricing.fmt_number(planned) if planned else "", ok,
+                     helper="Подставлено: вес × количество из заказа", extra=[spool_dd])
+
+    def write_off(self, spool_id: int, grams: float) -> None:
+        try:
+            db.use_spool(spool_id, grams, order_id=self.order_id)
+        except ValueError as exc:
+            if self.page:
+                self.page.open(ft.SnackBar(ft.Text(str(exc))))
+        self.refresh()
+
+    def _undo_usage(self, usage_id: int) -> None:
+        db.undo_usage(usage_id)
+        self.refresh()
 
     def _attachment_row(self, a) -> ft.Control:
         label = a["filename"] or a["file_id"] or f"вложение #{a['id']}"

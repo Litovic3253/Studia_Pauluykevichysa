@@ -17,7 +17,9 @@ from app.screens.customers_screen import CustomersScreen
 from app.screens.new_order import NewOrderScreen
 from app.screens.order_detail import OrderDetailScreen
 from app.screens.orders_screen import OrdersScreen
+from app.screens.plastics_screen import PlasticsScreen
 from app.screens.prices_screen import PricesScreen
+from app.screens.spools_screen import SpoolsScreen
 from app.screens.stats_screen import StatsScreen
 from paths import DATA_DIR
 
@@ -82,8 +84,17 @@ def main(page: ft.Page) -> None:
     prices_screen = PricesScreen()
     stats_screen = StatsScreen()
     new_order_screen = NewOrderScreen(on_created=open_order_from_anywhere)
+    spools_screen = SpoolsScreen()
 
-    sections = [orders_section, new_order_screen, customers_screen, prices_screen, stats_screen]
+    def add_spool_of(plastic: str) -> None:
+        nav_rail.selected_index = sections.index(spools_screen)
+        on_nav_change(None)
+        spools_screen.preselect(plastic)
+
+    plastics_screen = PlasticsScreen(on_add_spool=add_spool_of)
+
+    sections = [orders_section, new_order_screen, customers_screen, plastics_screen, spools_screen,
+                prices_screen, stats_screen]
     content = ft.Container(content=orders_section, expand=True, alignment=ft.alignment.top_center,
                            padding=ft.padding.symmetric(horizontal=theme.PAGE_PADDING, vertical=20))
 
@@ -170,6 +181,10 @@ def main(page: ft.Page) -> None:
                                          label="Новый заказ"),
             ft.NavigationRailDestination(icon=ft.Icons.PEOPLE_OUTLINE, selected_icon=ft.Icons.PEOPLE,
                                          label="Клиенты"),
+            ft.NavigationRailDestination(icon=ft.Icons.SCIENCE_OUTLINED, selected_icon=ft.Icons.SCIENCE,
+                                         label="Информация о пластике"),
+            ft.NavigationRailDestination(icon=ft.Icons.CALCULATE_OUTLINED, selected_icon=ft.Icons.CALCULATE,
+                                         label="Калькулятор пластика"),
             ft.NavigationRailDestination(icon=ft.Icons.SELL_OUTLINED, selected_icon=ft.Icons.SELL, label="Цены"),
             ft.NavigationRailDestination(icon=ft.Icons.INSIGHTS_OUTLINED, selected_icon=ft.Icons.INSIGHTS,
                                          label="Статистика"),
@@ -203,6 +218,8 @@ def main(page: ft.Page) -> None:
         orders_section.refresh(from_sync=True)
         customers_screen.refresh(from_sync=True)
         stats_screen.refresh()
+        plastics_screen.refresh()
+        spools_screen.refresh()
         sheets_sync.sync_in_background()
 
     page.pubsub.subscribe(lambda _: on_db_changed())
