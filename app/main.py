@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 
 import db
 from app import theme
+from app.excel_writer import export_to_excel
 from app.live_sync import LiveSync
 from app.screens.customers_screen import CustomersScreen
 from app.screens.new_order import NewOrderScreen
@@ -97,10 +98,35 @@ def main(page: ft.Page) -> None:
         on_click=toggle_theme,
     )
 
+    def on_export_file_selected(e: ft.FilePickerResultEvent) -> None:
+        if not e.path:
+            return
+        try:
+            export_to_excel(e.path)
+            page.open(ft.SnackBar(ft.Text(f"Экспортировано: {e.path}")))
+        except Exception as exc:  # noqa: BLE001 - любая ошибка записи файла должна дойти до пользователя
+            page.open(ft.SnackBar(ft.Text(f"Ошибка экспорта: {exc}"), bgcolor=ft.Colors.RED))
+
+    export_file_picker = ft.FilePicker(on_result=on_export_file_selected)
+    page.overlay.append(export_file_picker)
+
+    def on_export_click(e: ft.ControlEvent) -> None:
+        export_file_picker.save_file(
+            dialog_title="Сохранить экспорт как",
+            file_name="mochi_export.xlsx",
+            allowed_extensions=["xlsx"],
+        )
+
+    export_button = ft.IconButton(
+        icon=ft.Icons.FILE_DOWNLOAD,
+        tooltip="Экспорт в Excel",
+        on_click=on_export_click,
+    )
+
     nav_rail = ft.NavigationRail(
         selected_index=0,
         label_type=ft.NavigationRailLabelType.ALL,
-        leading=theme_button,
+        leading=ft.Column([theme_button, export_button], spacing=4, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
         destinations=[
             ft.NavigationRailDestination(icon=ft.Icons.LIST_ALT, label="Заказы"),
             ft.NavigationRailDestination(icon=ft.Icons.ADD_BOX, label="Новый заказ"),
