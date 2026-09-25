@@ -36,13 +36,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if not exist ".env" (
-    echo Файл .env не найден — приложение всё равно запустится, но скачивание
-    echo файлов из Telegram будет недоступно, пока не заполните BOT_TOKEN.
-    echo Скопируйте .env.example в .env, если нужен доступ к файлам из Telegram.
-    echo.
-)
-
 echo Запускаю Mochi Desktop...
 ".venv\Scripts\python.exe" app\main.py
 
