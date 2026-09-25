@@ -1,15 +1,15 @@
 """Экран «Новый заказ»: форма создания без необходимости в Telegram."""
 import shutil
-from pathlib import Path
 from typing import Callable
 
 import flet as ft
 
 import db
 import pricing
+from paths import DATA_DIR
 from app import input_hints, theme
 
-LOCAL_STORAGE = Path(__file__).resolve().parent.parent / "files_storage"
+LOCAL_STORAGE = DATA_DIR / "files_storage"
 
 
 class NewOrderScreen(ft.Column):

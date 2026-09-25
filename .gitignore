@@ -10,3 +10,7 @@ app/files_storage/
 .claude/
 google-service-account.json
 *service-account*.json
+dist/
+build/
+*.spec
+files_storage/

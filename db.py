@@ -5,7 +5,9 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-DB_PATH = Path(__file__).with_name("orders.db")
+from paths import DATA_DIR
+
+DB_PATH = DATA_DIR / "orders.db"
 
 STATUSES = {
     "new": "🆕 Новый",

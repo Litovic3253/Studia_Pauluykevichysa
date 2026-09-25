@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Callable
 
 from app.export import build_all_sheets
+from paths import DATA_DIR
 
 _SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-# Папка приложения (там же лежит .env) — относительный путь к ключу считается от неё,
+# Папка данных (там же лежит .env) — относительный путь к ключу считается от неё,
 # а не от текущей рабочей папки.
-_BASE_DIR = Path(__file__).resolve().parent.parent
+_BASE_DIR = DATA_DIR
 
 _state_lock = threading.Lock()
 _pending = False

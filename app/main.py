@@ -1,4 +1,4 @@
-"""Точка входа Mochi Desktop — админ-панели, использующей общую с ботом orders.db."""
+"""Точка входа Mochi Desktop — локальной панели управления заказами 3D-печати."""
 import sys
 from pathlib import Path
 
@@ -19,8 +19,9 @@ from app.screens.order_detail import OrderDetailScreen
 from app.screens.orders_screen import OrdersScreen
 from app.screens.prices_screen import PricesScreen
 from app.screens.stats_screen import StatsScreen
+from paths import DATA_DIR
 
-load_dotenv(ROOT / ".env")
+load_dotenv(DATA_DIR / ".env")
 
 
 class OrdersSection(ft.Column):

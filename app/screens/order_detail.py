@@ -7,9 +7,21 @@ import flet as ft
 
 import db
 import pricing
+from paths import DATA_DIR
 from app import input_hints, theme
 
-LOCAL_STORAGE = Path(__file__).resolve().parent.parent / "files_storage"
+LOCAL_STORAGE = DATA_DIR / "files_storage"
+
+
+def resolve_attachment_path(a) -> Path:
+    """Путь к локальному вложению. В базе путь абсолютный — после переноса папки
+    с программой на другой компьютер он «битый», поэтому ищем файл заново
+    в files_storage/<номер заказа>/ рядом с программой."""
+    stored = Path(a["local_path"])
+    if stored.exists():
+        return stored
+    fallback = LOCAL_STORAGE / str(a["order_id"]) / (a["filename"] or stored.name)
+    return fallback if fallback.exists() else stored
 
 
 class OrderDetailScreen(ft.Column):
@@ -125,7 +137,7 @@ class OrderDetailScreen(ft.Column):
         label = a["filename"] or a["file_id"] or f"вложение #{a['id']}"
         actions = [ft.IconButton(ft.Icons.DELETE, on_click=lambda e, aid=a["id"]: self._delete_attachment(aid))]
         if a["local_path"]:
-            actions.insert(0, ft.IconButton(ft.Icons.FOLDER_OPEN, on_click=lambda e, p=a["local_path"]: self._open_path(p)))
+            actions.insert(0, ft.IconButton(ft.Icons.FOLDER_OPEN, on_click=lambda e, a=a: self._open_path(str(resolve_attachment_path(a)))))
         return ft.Row([ft.Text(f"📎 {label} ({a['source']})", expand=True), *actions])
 
     def _open_path(self, path: str) -> None:
