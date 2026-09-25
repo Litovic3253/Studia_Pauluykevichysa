@@ -255,6 +255,21 @@ def rename_customer(customer_id: int, name: str, contact: str | None) -> None:
         c.execute("UPDATE orders SET client = ?, contact = ? WHERE customer_id = ?", (name, contact, customer_id))
 
 
+def delete_customer(customer_id: int, delete_orders: bool = False) -> None:
+    """Удаляет клиента. Его заказы либо остаются (отвязываются, имя в заказе сохраняется),
+    либо удаляются вместе с вложениями."""
+    with _conn() as c:
+        if delete_orders:
+            c.execute(
+                "DELETE FROM attachments WHERE order_id IN (SELECT id FROM orders WHERE customer_id = ?)",
+                (customer_id,),
+            )
+            c.execute("DELETE FROM orders WHERE customer_id = ?", (customer_id,))
+        else:
+            c.execute("UPDATE orders SET customer_id = NULL WHERE customer_id = ?", (customer_id,))
+        c.execute("DELETE FROM customers WHERE id = ?", (customer_id,))
+
+
 # ---------- заказы ----------
 
 def add_order(data: dict) -> int:

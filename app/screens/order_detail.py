@@ -14,7 +14,7 @@ LOCAL_STORAGE = Path(__file__).resolve().parent.parent / "files_storage"
 
 class OrderDetailScreen(ft.Column):
     def __init__(self, order_id: int, on_back: Callable[[], None]):
-        super().__init__(expand=True, spacing=theme.SPACING)
+        super().__init__(expand=True, spacing=theme.SPACING, scroll=ft.ScrollMode.AUTO)
         self.order_id = order_id
         self.on_back = on_back
 

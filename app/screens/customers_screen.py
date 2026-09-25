@@ -17,10 +17,16 @@ class CustomersScreen(ft.Column):
 
         self.search_field = ft.TextField(label="Поиск клиента", on_change=self._on_search)
         self.list_view = ft.ListView(expand=True, spacing=theme.SPACING)
-        self.detail_column = ft.Column(spacing=8)
-        self.detail_card = theme.card(self.detail_column, visible=False)
+        self.detail_column = ft.Column(spacing=8, scroll=ft.ScrollMode.AUTO, expand=True)
+        self.detail_card = theme.card(self.detail_column, visible=False, expand=True)
 
-        self.controls = [theme.card(self.search_field), self.list_view, self.detail_card]
+        # Список слева, карточка справа (со своей прокруткой) — чтобы карточка
+        # с историей заказов и кнопкой «Удалить» не уезжала за край окна.
+        self.controls = [
+            theme.card(self.search_field),
+            ft.Row([self.list_view, self.detail_card], expand=True,
+                   vertical_alignment=ft.CrossAxisAlignment.START),
+        ]
         self.refresh()
 
     def _on_search(self, e: ft.ControlEvent) -> None:
@@ -69,11 +75,11 @@ class CustomersScreen(ft.Column):
             contact_field = self._contact_field
         else:
             name_field = ft.TextField(
-                label="Имя", value=customer["name"],
+                label="Имя", value=customer["name"], expand=True,
                 on_blur=lambda e, cid=customer_id: self._save_identity(cid),
             )
             contact_field = ft.TextField(
-                label="Контакт", value=customer["contact"] or "",
+                label="Контакт", value=customer["contact"] or "", expand=True,
                 on_blur=lambda e, cid=customer_id: self._save_identity(cid),
             )
             self._name_field = name_field
@@ -96,6 +102,9 @@ class CustomersScreen(ft.Column):
             notes_field,
             ft.Text("История заказов:", weight=ft.FontWeight.BOLD),
             *order_rows,
+            ft.OutlinedButton("Удалить клиента", icon=ft.Icons.DELETE,
+                              on_click=lambda e, cid=customer_id, n=len(orders): self._confirm_delete(cid, n),
+                              style=ft.ButtonStyle(color=ft.Colors.RED)),
         ]
 
     def _save_identity(self, customer_id: int) -> None:
@@ -112,3 +121,30 @@ class CustomersScreen(ft.Column):
             return
         self._name_field.error_text = None
         self.refresh(from_sync=True)  # обновить список и заголовок, не пересоздавая поля ввода
+
+    def _confirm_delete(self, customer_id: int, orders_count: int) -> None:
+        customer = db.get_customer(customer_id)
+        delete_orders_cb = ft.Checkbox(label=f"Удалить также его заказы ({orders_count})", value=False)
+
+        def confirm(e: ft.ControlEvent) -> None:
+            self.page.close(dialog)
+            self._delete_customer(customer_id, delete_orders=bool(delete_orders_cb.value))
+
+        dialog = ft.AlertDialog(
+            title=ft.Text(f"Удалить клиента «{customer['name']}»?"),
+            content=ft.Column([
+                ft.Text("Если заказы не удалять, они останутся в списке заказов, но без привязки к клиенту."),
+                delete_orders_cb,
+            ], tight=True),
+            actions=[
+                ft.TextButton("Отмена", on_click=lambda e: self.page.close(dialog)),
+                ft.TextButton("Удалить", on_click=confirm, style=ft.ButtonStyle(color=ft.Colors.RED)),
+            ],
+        )
+        self.page.open(dialog)
+
+    def _delete_customer(self, customer_id: int, delete_orders: bool) -> None:
+        db.delete_customer(customer_id, delete_orders=delete_orders)
+        self.selected_customer_id = None
+        self.detail_card.visible = False
+        self.refresh()

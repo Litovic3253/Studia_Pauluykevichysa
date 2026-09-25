@@ -14,7 +14,7 @@ LOCAL_STORAGE = Path(__file__).resolve().parent.parent / "files_storage"
 
 class NewOrderScreen(ft.Column):
     def __init__(self, on_created: Callable[[int], None]):
-        super().__init__(expand=True, spacing=theme.SPACING)
+        super().__init__(expand=True, spacing=theme.SPACING, scroll=ft.ScrollMode.AUTO)
         self.on_created = on_created
         self._picked_files: list = []
 

@@ -37,3 +37,31 @@ def test_empty_name_shows_error_and_is_not_saved(temp_db, monkeypatch):
 
     assert db.get_customer(cid)["name"] == "Иван"
     assert screen._name_field.error_text
+
+
+def test_detail_card_has_delete_button(temp_db):
+    import flet as ft
+    cid = db.find_or_create_customer("Иван", "")
+    screen = CustomersScreen()
+    _open(screen, cid)
+    labels = [c.text for c in screen.detail_column.controls if isinstance(c, ft.OutlinedButton)]
+    assert "Удалить клиента" in labels
+
+
+def test_confirm_delete_removes_customer_and_closes_card(temp_db, monkeypatch):
+    order_id = db.add_order({"client": "Иван", "contact": "", "cost": 0, "price": 0})
+    cid = db.get_order(order_id)["customer_id"]
+    screen = CustomersScreen()
+    _open(screen, cid)
+
+    screen._delete_customer(cid, delete_orders=False)
+
+    assert db.get_customer(cid) is None
+    assert db.get_order(order_id) is not None
+    assert screen.selected_customer_id is None
+    assert screen.detail_card.visible is False
+
+
+def test_customer_detail_scrolls(temp_db):
+    screen = CustomersScreen()
+    assert screen.detail_column.scroll is not None

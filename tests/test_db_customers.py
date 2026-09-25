@@ -101,3 +101,30 @@ def test_rename_customer_changes_fingerprint(temp_db):
     before = db.change_fingerprint()
     db.rename_customer(cid, "Иван П.", "")
     assert db.change_fingerprint() != before
+
+
+def test_delete_customer_keeps_orders_unlinked_by_default(temp_db):
+    order_id = db.add_order({"client": "Иван", "contact": "", "cost": 0, "price": 0})
+    cid = db.get_order(order_id)["customer_id"]
+
+    db.delete_customer(cid)
+
+    assert db.get_customer(cid) is None
+    order = db.get_order(order_id)
+    assert order is not None
+    assert order["customer_id"] is None
+    assert order["client"] == "Иван"
+
+
+def test_delete_customer_with_orders_removes_them_and_their_attachments(temp_db):
+    order_id = db.add_order({"client": "Иван", "contact": "", "cost": 0, "price": 0})
+    other_id = db.add_order({"client": "Пётр", "contact": "", "cost": 0, "price": 0})
+    db.add_attachment(order_id, "local", local_path="C:/x.stl", filename="x.stl", file_type="document")
+    cid = db.get_order(order_id)["customer_id"]
+
+    db.delete_customer(cid, delete_orders=True)
+
+    assert db.get_customer(cid) is None
+    assert db.get_order(order_id) is None
+    assert db.list_attachments(order_id) == []
+    assert db.get_order(other_id) is not None
