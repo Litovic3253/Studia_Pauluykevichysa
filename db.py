@@ -306,6 +306,12 @@ def list_orders(kind: str = "active", limit: int = 40):
         return c.execute("SELECT * FROM orders ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
 
 
+def list_orders_all():
+    """Все заказы без ограничения — используется для экспорта/синхронизации."""
+    with _conn() as c:
+        return c.execute("SELECT * FROM orders ORDER BY id").fetchall()
+
+
 def search_orders(text: str, limit: int = 40):
     like = f"%{text}%"
     with _conn() as c:

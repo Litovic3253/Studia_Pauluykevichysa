@@ -48,3 +48,11 @@ def test_theme_mode_defaults_to_system(temp_db):
 def test_theme_mode_can_be_changed(temp_db):
     db.set_setting("theme_mode", "dark")
     assert db.get_settings()["theme_mode"] == "dark"
+
+
+def test_list_orders_all_returns_every_order_unordered_by_limit(temp_db):
+    for i in range(3):
+        db.add_order({"client": f"Клиент {i}", "contact": "", "cost": 0, "price": 0})
+    orders = db.list_orders_all()
+    assert len(orders) == 3
+    assert [o["id"] for o in orders] == sorted(o["id"] for o in orders)
