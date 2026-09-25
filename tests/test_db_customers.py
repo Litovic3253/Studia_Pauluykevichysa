@@ -68,3 +68,36 @@ def test_migrate_customers_v1_groups_legacy_orders(temp_db):
     db.init()  # повторный init должен смигрировать старый заказ
     rows = db.list_customers()
     assert any(r["name"] == "Анна Легаси" for r in rows)
+
+
+def test_rename_customer_updates_customer_and_its_orders(temp_db):
+    order_id = db.add_order({"client": "Иван", "contact": "@ivan", "cost": 0, "price": 0})
+    other_id = db.add_order({"client": "Пётр", "contact": "", "cost": 0, "price": 0})
+    cid = db.get_order(order_id)["customer_id"]
+
+    db.rename_customer(cid, "Иван Петров", "+79990000000")
+
+    customer = db.get_customer(cid)
+    assert customer["name"] == "Иван Петров"
+    assert customer["contact"] == "+79990000000"
+    order = db.get_order(order_id)
+    assert order["client"] == "Иван Петров"
+    assert order["contact"] == "+79990000000"
+    assert db.get_order(other_id)["client"] == "Пётр"
+
+
+def test_rename_customer_rejects_empty_name(temp_db):
+    cid = db.find_or_create_customer("Иван", "")
+    try:
+        db.rename_customer(cid, "   ", "")
+        assert False, "пустое имя должно отклоняться"
+    except ValueError:
+        pass
+    assert db.get_customer(cid)["name"] == "Иван"
+
+
+def test_rename_customer_changes_fingerprint(temp_db):
+    cid = db.find_or_create_customer("Иван", "")
+    before = db.change_fingerprint()
+    db.rename_customer(cid, "Иван П.", "")
+    assert db.change_fingerprint() != before

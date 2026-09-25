@@ -7,7 +7,7 @@ import flet as ft
 
 import db
 import pricing
-from app import theme
+from app import input_hints, theme
 
 LOCAL_STORAGE = Path(__file__).resolve().parent.parent / "files_storage"
 
@@ -29,8 +29,12 @@ class OrderDetailScreen(ft.Column):
         self.customer_dd = ft.Dropdown(label="Привязан к клиенту", on_change=self._on_customer_change)
         self.material_field = ft.TextField(label="Материал", on_blur=self._on_price_fields_blur)
         self.color_field = ft.TextField(label="Цвет", on_blur=self._on_other_field_blur, value="")
-        self.weight_field = ft.TextField(label="Вес, г", on_blur=self._on_price_fields_blur)
-        self.hours_field = ft.TextField(label="Часы печати", on_blur=self._on_price_fields_blur)
+        self.weight_field = input_hints.weight_field(
+            on_blur=self._on_price_fields_blur, on_pick=lambda: self._on_price_fields_blur(None)
+        )
+        self.hours_field = input_hints.hours_field(
+            on_blur=self._on_price_fields_blur, on_pick=lambda: self._on_price_fields_blur(None)
+        )
         self.qty_field = ft.TextField(label="Кол-во", on_blur=self._on_price_fields_blur)
         self.deadline_field = ft.TextField(label="Срок (ГГГГ-ММ-ДД)", on_blur=self._on_deadline_blur)
         self.price_field = ft.TextField(label="Цена (можно задать вручную)", on_blur=self._on_price_manual_blur)
@@ -89,8 +93,10 @@ class OrderDetailScreen(ft.Column):
             self.contact_field.value = order["contact"] or ""
             self.material_field.value = order["material"] or ""
             self.color_field.value = order["color"] or ""
-            self.weight_field.value = str(order["weight_g"] or 0)
-            self.hours_field.value = str(order["print_hours"] or 0)
+            self.weight_field.value = pricing.fmt_number(order["weight_g"])
+            self.hours_field.value = pricing.fmt_hours(order["print_hours"])
+            input_hints.check_weight(self.weight_field)
+            input_hints.check_hours(self.hours_field)
             self.qty_field.value = str(order["qty"] or 1)
             self.deadline_field.value = order["deadline"] or ""
             self.price_field.value = str(order["price"] or 0)
@@ -181,9 +187,12 @@ class OrderDetailScreen(ft.Column):
             db.update_order(self.order_id, price=value)
             self.refresh()
 
-    def _on_price_fields_blur(self, e: ft.ControlEvent) -> None:
-        weight = pricing.parse_number(self.weight_field.value) or 0
-        hours = pricing.parse_number(self.hours_field.value) or 0
+    def _on_price_fields_blur(self, e: ft.ControlEvent | None) -> None:
+        weight = input_hints.check_weight(self.weight_field)
+        hours = input_hints.check_hours(self.hours_field)
+        if weight is None or hours is None:
+            self.update()  # показать ошибку у поля; в базу неразобранное значение не пишем
+            return
         qty = int(pricing.parse_number(self.qty_field.value) or 1)
         db.update_order(
             self.order_id, material=self.material_field.value, weight_g=weight,

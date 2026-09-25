@@ -21,17 +21,51 @@ def parse_number(text: str | None) -> float | None:
     return value if value >= 0 else None
 
 
+def parse_weight(text: str | None) -> float | None:
+    """Принимает «454,28», «454.28», «454,28 г», «454.28гр», «12 грамм»."""
+    if not text:
+        return None
+    t = re.sub(r"\s*(?:г|гр|грамм(?:а|ов)?)\.?$", "", text.strip().lower())
+    return parse_number(t)
+
+
+_HOURS_RE = re.compile(
+    r"(?:(?P<d>\d+(?:[.,]\d+)?)\s*д(?:ень|ня|ней|н)?\.?)?\s*"
+    r"(?:(?P<h>\d+(?:[.,]\d+)?)\s*ч(?:ас|аса|асов)?\.?)?\s*"
+    r"(?:(?P<m>\d+)\s*м(?:ин(?:ут[аы]?)?)?\.?)?"
+)
+
+
 def parse_hours(text: str | None) -> float | None:
-    """Принимает «2.5», «2,5», «2:30», «2ч 30м», «150м»."""
+    """Принимает «2.5», «2,5», «2:30», «2ч 30м», «2ч 30 мин», «150 мин», «1д 6ч 46м» (1 день = 24 ч)."""
     if not text:
         return None
     t = text.strip().lower()
     if m := re.fullmatch(r"(\d+):(\d{1,2})", t):
         return int(m[1]) + int(m[2]) / 60
-    if m := re.fullmatch(r"(?:(\d+(?:[.,]\d+)?)\s*ч)?\s*(?:(\d+)\s*м(?:ин)?)?", t):
-        if m[1] or m[2]:
-            return float((m[1] or "0").replace(",", ".")) + int(m[2] or 0) / 60
+    if (m := _HOURS_RE.fullmatch(t)) and (m["d"] or m["h"] or m["m"]):
+        days = float((m["d"] or "0").replace(",", "."))
+        hours = float((m["h"] or "0").replace(",", "."))
+        return days * 24 + hours + int(m["m"] or 0) / 60
     return parse_number(t)
+
+
+def fmt_hours(hours: float | None) -> str:
+    """30.77 → «1д 6ч 46м», 2.5 → «2ч 30м» — с точностью до минуты, читается обратно parse_hours()."""
+    total_minutes = round((hours or 0) * 60)
+    days, rest = divmod(total_minutes, 24 * 60)
+    h, m = divmod(rest, 60)
+    parts = [f"{days}д"] if days else []
+    if h:
+        parts.append(f"{h}ч")
+    if m:
+        parts.append(f"{m}м")
+    return " ".join(parts) or "0ч"
+
+
+def fmt_number(value: float | None) -> str:
+    """454.28 → «454,28», 50.0 → «50» (не больше двух знаков после запятой)."""
+    return f"{value or 0:.2f}".rstrip("0").rstrip(".").replace(".", ",")
 
 
 def parse_date(text: str | None) -> str | None:

@@ -12,6 +12,8 @@ class CustomersScreen(ft.Column):
         self.search_text = ""
         self.selected_customer_id: int | None = None
         self._notes_field: ft.TextField | None = None
+        self._name_field: ft.TextField | None = None
+        self._contact_field: ft.TextField | None = None
 
         self.search_field = ft.TextField(label="Поиск клиента", on_change=self._on_search)
         self.list_view = ft.ListView(expand=True, spacing=theme.SPACING)
@@ -60,10 +62,22 @@ class CustomersScreen(ft.Column):
             self.selected_customer_id = None
             return
         if from_sync and self.detail_column.controls:
-            # notes_field — TextField с сохранением по on_blur: во время live-sync
-            # переиспользуем текущий контрол, чтобы не затереть незасохранённый ввод.
+            # Поля с сохранением по on_blur: во время live-sync переиспользуем
+            # текущие контролы, чтобы не затереть незасохранённый ввод.
             notes_field = self._notes_field
+            name_field = self._name_field
+            contact_field = self._contact_field
         else:
+            name_field = ft.TextField(
+                label="Имя", value=customer["name"],
+                on_blur=lambda e, cid=customer_id: self._save_identity(cid),
+            )
+            contact_field = ft.TextField(
+                label="Контакт", value=customer["contact"] or "",
+                on_blur=lambda e, cid=customer_id: self._save_identity(cid),
+            )
+            self._name_field = name_field
+            self._contact_field = contact_field
             notes_field = ft.TextField(
                 label="Заметки", value=customer["notes"] or "", multiline=True,
                 on_blur=lambda e, cid=customer_id: db.update_customer(cid, notes=notes_field.value),
@@ -78,8 +92,23 @@ class CustomersScreen(ft.Column):
         self.detail_card.visible = True
         self.detail_column.controls = [
             ft.Text(customer["name"], size=18, weight=ft.FontWeight.BOLD),
-            ft.Text(f"Контакт: {customer['contact'] or '—'}"),
+            ft.Row([name_field, contact_field]),
             notes_field,
             ft.Text("История заказов:", weight=ft.FontWeight.BOLD),
             *order_rows,
         ]
+
+    def _save_identity(self, customer_id: int) -> None:
+        customer = db.get_customer(customer_id)
+        name = (self._name_field.value or "").strip()
+        contact = (self._contact_field.value or "").strip()
+        if customer and name == customer["name"] and contact == (customer["contact"] or ""):
+            return
+        try:
+            db.rename_customer(customer_id, name, contact)
+        except ValueError as exc:
+            self._name_field.error_text = str(exc)
+            self.update()
+            return
+        self._name_field.error_text = None
+        self.refresh(from_sync=True)  # обновить список и заголовок, не пересоздавая поля ввода

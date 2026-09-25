@@ -244,6 +244,17 @@ def update_customer(customer_id: int, **fields) -> None:
         c.execute(f"UPDATE customers SET {sets} WHERE id = ?", [*fields.values(), customer_id])
 
 
+def rename_customer(customer_id: int, name: str, contact: str | None) -> None:
+    """Меняет имя/контакт клиента и копирует их во все его заказы (там они хранятся копией)."""
+    name = (name or "").strip()
+    contact = (contact or "").strip()
+    if not name:
+        raise ValueError("Имя клиента не может быть пустым")
+    with _conn() as c:
+        c.execute("UPDATE customers SET name = ?, contact = ? WHERE id = ?", (name, contact, customer_id))
+        c.execute("UPDATE orders SET client = ?, contact = ? WHERE customer_id = ?", (name, contact, customer_id))
+
+
 # ---------- заказы ----------
 
 def add_order(data: dict) -> int:

@@ -7,7 +7,7 @@ import flet as ft
 
 import db
 import pricing
-from app import theme
+from app import input_hints, theme
 
 LOCAL_STORAGE = Path(__file__).resolve().parent.parent / "files_storage"
 
@@ -23,8 +23,12 @@ class NewOrderScreen(ft.Column):
         self.description_field = ft.TextField(label="Описание", multiline=True)
         self.material_dd = ft.Dropdown(label="Материал", on_change=self._recalc)
         self.color_field = ft.TextField(label="Цвет")
-        self.weight_field = ft.TextField(label="Вес, г", value="0", on_change=self._recalc)
-        self.hours_field = ft.TextField(label="Часы печати", value="0", on_change=self._recalc)
+        self.weight_field = input_hints.weight_field(
+            value="0", on_change=self._recalc, on_pick=lambda: self._recalc(None)
+        )
+        self.hours_field = input_hints.hours_field(
+            value="0", on_change=self._recalc, on_pick=lambda: self._recalc(None)
+        )
         self.qty_field = ft.TextField(label="Кол-во", value="1", on_change=self._recalc)
         self.deadline_field = ft.TextField(label="Срок (сегодня / завтра / 25.09)")
         self.reverse_checkbox = ft.Checkbox(label="Реверс-моделирование (нет STL)", on_change=self._recalc)
@@ -72,8 +76,8 @@ class NewOrderScreen(ft.Column):
         self.update()
 
     def _recalc(self, e: ft.ControlEvent | None) -> None:
-        weight = pricing.parse_number(self.weight_field.value) or 0
-        hours = pricing.parse_number(self.hours_field.value) or 0
+        weight = input_hints.check_weight(self.weight_field) or 0
+        hours = input_hints.check_hours(self.hours_field) or 0
         qty = int(pricing.parse_number(self.qty_field.value) or 1)
         result = pricing.calc_price(
             self.material_dd.value, weight, hours, qty, bool(self.reverse_checkbox.value)
@@ -88,8 +92,12 @@ class NewOrderScreen(ft.Column):
             self.update()
             return
 
-        weight = pricing.parse_number(self.weight_field.value) or 0
-        hours = pricing.parse_number(self.hours_field.value) or 0
+        weight = input_hints.check_weight(self.weight_field)
+        hours = input_hints.check_hours(self.hours_field)
+        if weight is None or hours is None:
+            self.error_text.value = "Проверьте вес и часы печати — формат не распознан (см. подсказку ⓘ у поля)."
+            self.update()
+            return
         qty = int(pricing.parse_number(self.qty_field.value) or 1)
         reverse = bool(self.reverse_checkbox.value)
         calc = pricing.calc_price(self.material_dd.value, weight, hours, qty, reverse)
