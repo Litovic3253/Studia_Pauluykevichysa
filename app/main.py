@@ -10,7 +10,7 @@ import flet as ft
 from dotenv import load_dotenv
 
 import db
-from app import theme
+from app import sheets_sync, theme
 from app.excel_writer import export_to_excel
 from app.live_sync import LiveSync
 from app.screens.customers_screen import CustomersScreen
@@ -141,6 +141,7 @@ def main(page: ft.Page) -> None:
         orders_section.refresh(from_sync=True)
         customers_screen.refresh(from_sync=True)
         stats_screen.refresh()
+        sheets_sync.sync_in_background()
 
     page.pubsub.subscribe(lambda _: on_db_changed())
     live_sync = LiveSync(on_change=lambda: page.pubsub.send_all("db_changed"), interval=3.0)
