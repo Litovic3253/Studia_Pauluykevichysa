@@ -33,7 +33,8 @@ DEFAULT_SETTINGS = {
     "owners": [],        # telegram id владельцев (если ADMIN_IDS не задан в .env)
     "reminder_hour": 9,  # во сколько присылать сводку по дедлайнам
     "last_reminder": "",
-    "payment_text": "",  # «Оплата: …» внизу PDF для клиента — телефон, имя, банк; пусто — строки нет
+    "payment_text": "",
+    "prepayment_percent": 50,  # «Предоплата N% — сейчас» в PDF для клиента; 0 — строки нет  # «Оплата: …» внизу PDF для клиента — телефон, имя, банк; пусто — строки нет
     "theme_mode": "system",  # "system" или ключ app.theme.PALETTES («dracula», «nord»…) — тема приложения
 }
 

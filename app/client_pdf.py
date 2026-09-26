@@ -44,6 +44,15 @@ def _rate(value: float) -> str:
     return f"{int(whole):,}".replace(",", " ") + (f",{frac}" if frac else "")
 
 
+def prepayment_due(order) -> int:
+    """Сколько клиенту внести сейчас: процент предоплаты от цены, в целых рублях.
+    0 — если заказ оплачен, предоплата уже внесена или процент в «Ценах» равен нулю."""
+    percent = db.get_settings().get("prepayment_percent") or 0
+    if order["paid"] or (order["prepayment"] or 0) or not percent:
+        return 0
+    return round((order["price"] or 0) * percent / 100)
+
+
 def price_lines(order) -> list[tuple[str, str, float]]:
     """[(позиция, как посчитано, сумма в целых рублях)] — сумма строк ровно равна цене заказа.
     Ручная цена или сменившиеся расценки дают строку «Скидка» / «Корректировка цены»,
@@ -121,7 +130,7 @@ def build_order_pdf(order_id: int, folder: Path | None = None) -> Path:
     pdf.set_font("mono", size=10)
     pdf.set_text_color(*MUTED)
     pdf.cell(0, 11, f"от {pricing.fmt_date(order['created_at'][:10])}", align="R", new_x="LMARGIN", new_y="NEXT")
-    pdf.ln(8)
+    pdf.ln(6)
 
     _heading(pdf, "Детали заказа")
     weight = f"{pricing.fmt_number(order['weight_g'])} г" + (" за 1 шт" if qty > 1 else "")
@@ -141,12 +150,16 @@ def build_order_pdf(order_id: int, folder: Path | None = None) -> Path:
     ]
     for label, value in details:
         _detail_row(pdf, label, value or "—", width)
-    pdf.ln(7)
+    pdf.ln(5)
 
-    # Итоговая сумма — крупно, на жёлтой подложке.
+    # Итоговая сумма — крупно, на жёлтой подложке; ниже — сколько внести сейчас.
     total = order["price"] or 0
     prepayment = order["prepayment"] or 0
-    box_h = 22 if order["paid"] or prepayment else 16
+    due_now = prepayment_due(order)
+    note = ("Оплачено полностью" if order["paid"] else
+            f"Внесена предоплата {_money(prepayment)} · осталось оплатить {_money(pricing.remaining_to_pay(order))}"
+            if prepayment else None)
+    box_h = 16 + (6 if note else 0) + (16 if due_now else 0)
     y = pdf.get_y()
     pdf.set_fill_color(*SOFT)
     pdf.set_draw_color(*ACCENT)
@@ -157,14 +170,26 @@ def build_order_pdf(order_id: int, folder: Path | None = None) -> Path:
     pdf.cell(width / 2 - 6, 10, "Итого к оплате")
     pdf.set_font("mono", "B", 18)
     pdf.cell(width / 2 - 6, 10, _money(total), align="R", new_x="LMARGIN", new_y="NEXT")
-    if order["paid"] or prepayment:
+    if note:
         pdf.set_x(24)
         pdf.set_font("mono", size=9)
         pdf.set_text_color(*MUTED)
-        note = ("Оплачено полностью" if order["paid"] else
-                f"Внесена предоплата {_money(prepayment)} · осталось оплатить {_money(pricing.remaining_to_pay(order))}")
-        pdf.cell(width - 12, 6, note, align="R")
-    pdf.set_y(y + box_h + 9)
+        pdf.cell(width - 12, 6, note, align="R", new_x="LMARGIN", new_y="NEXT")
+    if due_now:
+        percent = pricing.fmt_number(db.get_settings()["prepayment_percent"])
+        pdf.set_draw_color(*ACCENT)
+        pdf.line(24, pdf.get_y() + 1.5, 18 + width - 6, pdf.get_y() + 1.5)
+        pdf.set_xy(24, pdf.get_y() + 3)
+        pdf.set_font("mono", "B", 11)
+        pdf.set_text_color(*INK)
+        pdf.cell(width / 2 - 6, 7, f"Предоплата {percent}% — сейчас")
+        pdf.set_font("mono", "B", 14)
+        pdf.cell(width / 2 - 6, 7, _money(due_now), align="R", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_x(24)
+        pdf.set_font("mono", size=9)
+        pdf.set_text_color(*MUTED)
+        pdf.cell(width - 12, 5, f"остаток {_money(round(total) - due_now)} — при получении заказа", align="R")
+    pdf.set_y(y + box_h + 7)
 
     _heading(pdf, "Из чего складывается цена")
     lines = price_lines(order)
@@ -190,11 +215,11 @@ def build_order_pdf(order_id: int, folder: Path | None = None) -> Path:
 
 
 def _payment_box(pdf: FPDF, text: str, width: float) -> None:
-    """«Оплата: …» — в рамке цвета акцента под итогом, чтобы клиент сразу видел, куда переводить."""
-    pdf.ln(6)
+    """«Оплата:» и под ним строки как введены в «Ценах» (телефон, имя, банк) — в рамке цвета акцента."""
+    pdf.ln(5)
     pdf.set_font("mono", size=11)
-    lines = pdf.multi_cell(width - 12 - 22, 7, text, dry_run=True, output="LINES")
-    box_h = 7 * len(lines) + 8
+    lines = pdf.multi_cell(width - 12, 6, text, dry_run=True, output="LINES")
+    box_h = 6 * (len(lines) + 1) + 7
     # Рамке можно опуститься ниже обычного поля — до подписи внизу страницы (она на 14 мм от края).
     if pdf.get_y() + box_h > pdf.h - 17:
         pdf.add_page()
@@ -203,12 +228,13 @@ def _payment_box(pdf: FPDF, text: str, width: float) -> None:
     pdf.set_line_width(0.5)
     pdf.rect(18, y, width, box_h, style="D", round_corners=True, corner_radius=3)
     pdf.set_line_width(0.2)
-    pdf.set_xy(24, y + 4)
+    pdf.set_xy(24, y + 3.5)
     pdf.set_font("mono", "B", 11)
     pdf.set_text_color(*INK)
-    pdf.cell(22, 7, "Оплата:")
+    pdf.cell(0, 6, "Оплата:", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_x(24)
     pdf.set_font("mono", size=11)
-    pdf.multi_cell(width - 12 - 22, 7, text, new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(width - 12, 6, text, new_x="LMARGIN", new_y="NEXT")
 
 
 def _heading(pdf: FPDF, text: str) -> None:
@@ -222,10 +248,10 @@ def _detail_row(pdf: FPDF, label: str, value: str, width: float) -> None:
     label_w = 42
     pdf.set_font("mono", size=9)
     pdf.set_text_color(*MUTED)
-    pdf.cell(label_w, 7, label)
+    pdf.cell(label_w, 6, label)
     pdf.set_font("mono", size=10)
     pdf.set_text_color(*INK)
-    pdf.multi_cell(width - label_w, 7, str(value), new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(width - label_w, 6, str(value), new_x="LMARGIN", new_y="NEXT")
     pdf.set_draw_color(*LINE)
     pdf.line(18, pdf.get_y(), 18 + width, pdf.get_y())
 
@@ -238,10 +264,10 @@ def _price_row(pdf: FPDF, name: str, how: str, amount: str, width: float) -> Non
     pdf.cell(amount_w, 6, amount, align="R", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("mono", size=8)
     pdf.set_text_color(*MUTED)
-    pdf.multi_cell(width - amount_w, 5, how, new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(width - amount_w, 4.5, how, new_x="LMARGIN", new_y="NEXT")
     pdf.set_draw_color(*LINE)
     pdf.line(18, pdf.get_y() + 1, 18 + width, pdf.get_y() + 1)
-    pdf.ln(3)
+    pdf.ln(2.5)
 
 
 def open_file(path: Path) -> None:

@@ -28,10 +28,14 @@ class PricesScreen(ft.Column):
             helper_text="Подставляется в новые заказы",
         )
         self.currency_field = theme.field("Валюта", {"xs": 12, "sm": 6}, on_blur=self._save_scalars)
+        self.prepayment_percent_field = theme.field(
+            "Предоплата в PDF", {"xs": 12, "sm": 6}, suffix_text="%", on_blur=self._save_scalars,
+            helper_text="Сколько клиенту внести сразу; 0 — не писать",
+        )
         self.payment_field = theme.field(
             "Оплата в PDF для клиента", {"xs": 12}, on_blur=self._save_scalars,
-            hint_text="89001234567 Имя Отчество банк: Сбер",
-            helper_text="Печатается внизу PDF строкой «Оплата: …». Пусто — строки не будет",
+            multiline=True, min_lines=3, hint_text="+79001234567\nИмя Отчество\nБанк",
+            helper_text="Печатается внизу PDF под «Оплата:» — строка в строку. Пусто — блока не будет",
         )
         self.status_text = ft.Text("", size=13, color=theme.OK)
         self.status_row = ft.Container(self.status_text, visible=False)
@@ -56,7 +60,7 @@ class PricesScreen(ft.Column):
 
         settings = theme.section("Расчёт цены", [
             theme.grid([self.hour_rate_field, self.reverse_price_field, self.defect_field, self.currency_field,
-                        self.payment_field]),
+                        self.prepayment_percent_field, self.payment_field]),
             ft.Text("Изменения сохраняются, когда вы уходите из поля. Цены уже созданных заказов не меняются, "
                     "а их себестоимость и прибыль пересчитываются по новой закупке.",
                     size=12, color=ft.Colors.ON_SURFACE_VARIANT),
@@ -89,6 +93,7 @@ class PricesScreen(ft.Column):
         self.defect_field.value = pricing.fmt_number(settings["defect_percent"])
         self.currency_field.value = settings["currency"]
         self.payment_field.value = settings["payment_text"]
+        self.prepayment_percent_field.value = pricing.fmt_number(settings["prepayment_percent"])
         if self.page:
             self.update()
 
@@ -191,5 +196,8 @@ class PricesScreen(ft.Column):
         if self.currency_field.value:
             db.set_setting("currency", self.currency_field.value.strip())
         db.set_setting("payment_text", (self.payment_field.value or "").strip())
+        percent = pricing.parse_number(self.prepayment_percent_field.value)
+        if percent is not None and percent <= 100:
+            db.set_setting("prepayment_percent", percent)
         self._say("Настройки сохранены.")
         self.update()

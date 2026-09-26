@@ -83,3 +83,20 @@ def test_payment_box_renders_long_text(temp_db, tmp_path):
     db.set_setting("payment_text", "89001234567 Иван Иванович банк: Сбер " * 4)
     path = client_pdf.build_order_pdf(_order(), tmp_path)
     assert path.read_bytes().startswith(b"%PDF")
+
+
+def test_prepayment_due_is_half_by_default(temp_db):
+    _setup()
+    assert client_pdf.prepayment_due(db.get_order(_order(price=7601))) == 3800  # 50%, округлено до рубля
+
+
+def test_prepayment_due_zero_when_paid_prepaid_or_disabled(temp_db):
+    _setup()
+    assert client_pdf.prepayment_due(db.get_order(_order(price=1000, prepayment=300))) == 0
+    paid = _order(price=1000)
+    db.update_order(paid, paid=1)
+    assert client_pdf.prepayment_due(db.get_order(paid)) == 0
+    db.set_setting("prepayment_percent", 0)
+    assert client_pdf.prepayment_due(db.get_order(_order(price=1000))) == 0
+    db.set_setting("prepayment_percent", 30)
+    assert client_pdf.prepayment_due(db.get_order(_order(price=1000))) == 300
