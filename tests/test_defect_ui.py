@@ -10,7 +10,7 @@ def _texts(column):
 
 
 def _prices(temp_db):
-    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("materials", {"PLA": 4})
     db.set_setting("hour_rate", 50)
 
 

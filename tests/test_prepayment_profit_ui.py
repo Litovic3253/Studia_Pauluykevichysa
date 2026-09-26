@@ -10,8 +10,8 @@ def _texts(column):
 
 
 def _setup():
-    db.set_setting("materials", {"PLA": 4000})
-    db.set_setting("purchase_prices", {"PLA": 1500})
+    db.set_setting("materials", {"PLA": 4})
+    db.set_setting("purchase_prices", {"PLA": 1.5})
     db.set_setting("hour_rate", 50)
     db.set_setting("defect_percent", 0)
 
@@ -76,10 +76,10 @@ def test_prices_screen_adds_plastic_with_purchase_and_recalcs_costs(temp_db, mon
     screen = PricesScreen()
     monkeypatch.setattr(screen, "update", lambda: None)
     screen.new_material_name.value = "TPU"
-    screen.new_material_purchase.value = "2000"
-    screen.new_material_price.value = "7000"
+    screen.new_material_purchase.value = "2"
+    screen.new_material_price.value = "7"
     screen._add_material(None)
     settings = db.get_settings()
-    assert settings["materials"]["TPU"] == 7000
-    assert settings["purchase_prices"]["TPU"] == 2000
+    assert settings["materials"]["TPU"] == 7
+    assert settings["purchase_prices"]["TPU"] == 2
     assert db.get_order(order_id)["cost"] == 200

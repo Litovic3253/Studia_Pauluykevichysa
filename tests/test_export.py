@@ -45,13 +45,13 @@ def test_build_customers_sheet_includes_aggregates(temp_db):
 
 
 def test_build_prices_sheet_has_materials_and_rates_sections(temp_db):
-    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("materials", {"PLA": 4})
     db.set_setting("hour_rate", 55)
 
     rows = export.build_prices_sheet()
 
-    assert rows[0] == ["Материал", "Цена за кг"]
-    assert ["PLA", 4000] in rows
+    assert rows[0] == ["Материал", "Цена за грамм"]
+    assert ["PLA", 4] in rows
     assert ["Параметр", "Значение"] in rows
     assert ["Ставка часа печати", 55] in rows
 

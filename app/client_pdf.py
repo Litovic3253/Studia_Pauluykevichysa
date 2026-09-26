@@ -17,7 +17,10 @@ from paths import DATA_DIR
 
 PDF_DIR = DATA_DIR / "PDF для клиентов"
 STUDIO = "Студия Паулюкевичуса"
-FONTS_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent)) / "assets" / "fonts"
+ASSETS = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent)) / "assets"
+FONTS_DIR = ASSETS / "fonts"
+LOGO = ASSETS / "icon.png"  # значок студии — тот же, что у программы
+LOGO_SIZE = 17  # мм
 
 INK = (24, 24, 27)       # основной текст
 MUTED = (113, 113, 122)  # подписи
@@ -51,13 +54,13 @@ def price_lines(order) -> list[tuple[str, str, float]]:
     defect = order["defect_percent"] or 0
     reverse = bool(order["reverse_engineering"])
     calc = pricing.calc_price(order["material"], weight, hours, qty, reverse, defect)
-    per_kg = s["materials"].get(order["material"] or "", 0)
+    per_gram = s["materials"].get(order["material"] or "", 0)
     cur = s["currency"]
 
     lines = []
     if calc["material_cost"]:
         lines.append(("Материал", f"{order['material']}: {pricing.fmt_number(weight)} г × {qty} шт × "
-                                  f"{_rate(per_kg)} {cur}/кг", calc["material_cost"]))
+                                  f"{_rate(per_gram)} {cur}/г", calc["material_cost"]))
     if calc["time_cost"]:
         lines.append(("Время печати", f"{pricing.fmt_number(hours)} ч × {qty} шт × "
                                       f"{_rate(s['hour_rate'])} {cur}/ч", calc["time_cost"]))
@@ -104,17 +107,17 @@ def build_order_pdf(order_id: int, folder: Path | None = None) -> Path:
     pdf.add_page()
     width = pdf.epw
 
-    # Шапка: студия, номер и дата заказа.
-    pdf.set_fill_color(*ACCENT)
-    pdf.rect(18, 18, 4, 17, style="F")
-    pdf.set_x(26)
+    # Шапка: логотип, студия, номер и дата заказа.
+    text_x = 18 + LOGO_SIZE + 5
+    pdf.image(str(LOGO), x=18, y=18, w=LOGO_SIZE, h=LOGO_SIZE)
+    pdf.set_x(text_x)
     pdf.set_font("mono", "B", 11)
     pdf.set_text_color(*MUTED)
     pdf.cell(0, 6, STUDIO.upper(), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_x(26)
+    pdf.set_x(text_x)
     pdf.set_font("mono", "B", 20)
     pdf.set_text_color(*INK)
-    pdf.cell(width / 2, 11, f"Заказ №{order['id']}")
+    pdf.cell(width / 2 - LOGO_SIZE, 11, f"Заказ №{order['id']}")
     pdf.set_font("mono", size=10)
     pdf.set_text_color(*MUTED)
     pdf.cell(0, 11, f"от {pricing.fmt_date(order['created_at'][:10])}", align="R", new_x="LMARGIN", new_y="NEXT")

@@ -34,7 +34,7 @@ def test_parse_date_rejects_garbage():
 
 
 def test_calc_price_matches_formula(temp_db):
-    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("materials", {"PLA": 4})
     db.set_setting("hour_rate", 50)
     db.set_setting("reverse_price", 1000)
     result = pricing.calc_price("PLA", weight_g=100, hours=2, qty=1)
@@ -45,7 +45,7 @@ def test_calc_price_matches_formula(temp_db):
 
 
 def test_calc_price_adds_reverse_engineering_cost(temp_db):
-    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("materials", {"PLA": 4})
     db.set_setting("hour_rate", 50)
     db.set_setting("reverse_price", 1000)
     result = pricing.calc_price("PLA", weight_g=0, hours=0, qty=1, reverse=True)
@@ -54,7 +54,7 @@ def test_calc_price_adds_reverse_engineering_cost(temp_db):
 
 
 def test_recalc_order_price_updates_stored_values(temp_db):
-    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("materials", {"PLA": 4})
     db.set_setting("hour_rate", 50)
     order_id = db.add_order({
         "client": "Тест", "contact": "", "material": "PLA",
@@ -122,7 +122,7 @@ def test_fmt_number_never_uses_exponent():
 
 
 def test_calc_price_adds_defect_percent_of_print_cost(temp_db):
-    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("materials", {"PLA": 4})
     db.set_setting("hour_rate", 50)
     # материал 100 г × 4000/кг = 400, время 2 ч × 50 = 100 → печать 500
     result = pricing.calc_price("PLA", weight_g=100, hours=2, qty=1, defect_percent=10)
@@ -131,7 +131,7 @@ def test_calc_price_adds_defect_percent_of_print_cost(temp_db):
 
 
 def test_calc_price_defect_not_applied_to_reverse_modeling(temp_db):
-    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("materials", {"PLA": 4})
     db.set_setting("hour_rate", 50)
     db.set_setting("reverse_price", 1000)
     result = pricing.calc_price("PLA", weight_g=100, hours=2, qty=1, reverse=True, defect_percent=10)
@@ -140,14 +140,14 @@ def test_calc_price_defect_not_applied_to_reverse_modeling(temp_db):
 
 
 def test_calc_price_defaults_to_zero_defect(temp_db):
-    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("materials", {"PLA": 4})
     result = pricing.calc_price("PLA", weight_g=100, hours=0, qty=1)
     assert result["defect_cost"] == 0
     assert result["price"] == 400
 
 
 def test_recalc_order_price_uses_orders_defect_percent(temp_db):
-    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("materials", {"PLA": 4})
     db.set_setting("hour_rate", 50)
     order_id = db.add_order({"client": "К", "contact": "", "material": "PLA", "weight_g": 100,
                               "print_hours": 2, "qty": 1, "cost": 0, "price": 0, "defect_percent": 20})
@@ -158,8 +158,8 @@ def test_recalc_order_price_uses_orders_defect_percent(temp_db):
 
 
 def test_calc_price_cost_is_purchase_plastic_only(temp_db):
-    db.set_setting("materials", {"PLA": 4000})
-    db.set_setting("purchase_prices", {"PLA": 1500})
+    db.set_setting("materials", {"PLA": 4})
+    db.set_setting("purchase_prices", {"PLA": 1.5})
     db.set_setting("hour_rate", 50)
     db.set_setting("reverse_price", 1000)
     # цена: материал 400 + время 100 + брак 10% 50 + реверс 1000 = 1550
@@ -174,7 +174,7 @@ def test_recalc_costs_updates_existing_orders(temp_db):
     db.set_setting("hour_rate", 50)
     order_id = db.add_order({"client": "К", "contact": "", "material": "PLA", "weight_g": 200,
                               "print_hours": 1, "qty": 2, "cost": 0, "price": 3000})
-    db.set_setting("purchase_prices", {"PLA": 1000})
+    db.set_setting("purchase_prices", {"PLA": 1})
     db.recalc_costs()
     order = db.get_order(order_id)
     assert order["cost"] == 200 * 2 * 1000 / 1000
@@ -196,3 +196,22 @@ def test_prepayment_counts_as_received_and_reduces_debt(temp_db):
     db.update_order(order_id, paid=1)
     s = db.stats()
     assert s["revenue"] == 1000 and s["unpaid"] == 0 and s["profit"] == 900
+
+
+def test_old_per_kg_prices_migrate_to_per_gram_once(temp_db):
+    """База старой версии хранила цены «за кг» — при запуске они делятся на 1000, и только один раз."""
+    import sqlite3
+    with sqlite3.connect(db.DB_PATH) as c:
+        c.execute("DELETE FROM settings WHERE key = 'prices_per_gram_v1'")
+        c.execute("UPDATE settings SET value = '{\"ABS\": 10000, \"PLA\": 4500}' WHERE key = 'materials'")
+        c.execute("UPDATE settings SET value = '{\"ABS\": 1290}' WHERE key = 'purchase_prices'")
+    db.init()
+    db.init()
+    s = db.get_settings()
+    assert s["materials"] == {"ABS": 10, "PLA": 4.5}
+    assert s["purchase_prices"] == {"ABS": 1.29}
+    assert pricing.calc_price("ABS", 100, 0, 1)["material_cost"] == 1000
+
+
+def test_fresh_database_prices_are_already_per_gram(temp_db):
+    assert db.get_settings()["materials"] == {"PLA": 4, "PETG": 6, "ABS": 10}

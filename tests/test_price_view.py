@@ -10,7 +10,7 @@ def _texts(rows):
 
 
 def test_breakdown_lists_each_component_and_total(temp_db):
-    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("materials", {"PLA": 4})
     db.set_setting("hour_rate", 50)
     db.set_setting("currency", "₽")
     calc = {"material_cost": 400, "time_cost": 100, "defect_cost": 50, "reverse_cost": 0, "cost": 550, "price": 550}

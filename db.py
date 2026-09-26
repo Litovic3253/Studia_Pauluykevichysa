@@ -22,9 +22,9 @@ STATUSES = {
 ACTIVE_STATUSES = ("new", "queued", "printing", "post", "ready")
 
 DEFAULT_SETTINGS = {
-    # цена материала, ₽ за кг (уже итоговая цена для клиента)
-    "materials": {"PLA": 4000, "PETG": 6000, "ABS": 10000},
-    # закупочная цена пластика, ₽ за кг — по ней считается себестоимость и прибыль
+    # цена материала, ₽ за грамм (уже итоговая цена для клиента)
+    "materials": {"PLA": 4, "PETG": 6, "ABS": 10},
+    # закупочная цена пластика, ₽ за грамм — по ней считается себестоимость и прибыль
     "purchase_prices": {},
     "hour_rate": 50,        # ₽ за час печати
     "reverse_price": 1000,  # ₽ за реверс-моделирование, если нет STL у заказчика
@@ -129,12 +129,15 @@ def init() -> None:
                 created_at TEXT NOT NULL
             )"""
         )
+        # Цены в базе ещё «за кг», если её вёл старый код (pricing_v2 есть, а перехода на граммы — нет).
+        prices_per_kg = bool(c.execute("SELECT 1 FROM settings WHERE key = 'pricing_v2'").fetchone()) and not             c.execute("SELECT 1 FROM settings WHERE key = 'prices_per_gram_v1'").fetchone()
         for key, value in DEFAULT_SETTINGS.items():
             c.execute(
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
                 (key, json.dumps(value, ensure_ascii=False)),
             )
         _migrate_pricing_v2(c)
+        _migrate_prices_per_gram(c, prices_per_kg)
         _migrate_customers_v1(c)
         _migrate_attachments_v1(c)
         if not c.execute("SELECT 1 FROM settings WHERE key = 'costs_v1'").fetchone():
@@ -145,6 +148,21 @@ def init() -> None:
             # Себестоимость теперь = только закупка пластика (часы печати ушли в прибыль).
             _recalc_costs(c)
             c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('costs_v2', 'true')")
+
+
+def _migrate_prices_per_gram(c, prices_per_kg: bool) -> None:
+    """Разовый переход цен пластика с «₽ за кг» на «₽ за грамм»: 10 000 ₽/кг → 10 ₽/г.
+    Новая база уже создана в граммах — её не трогаем, только ставим отметку."""
+    if c.execute("SELECT 1 FROM settings WHERE key = 'prices_per_gram_v1'").fetchone():
+        return
+    if prices_per_kg:
+        for key in ("materials", "purchase_prices"):
+            row = c.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+            if row:
+                per_gram = {name: round(v / 1000, 4) if v else v for name, v in json.loads(row["value"]).items()}
+                c.execute("UPDATE settings SET value = ? WHERE key = ?",
+                          (json.dumps(per_gram, ensure_ascii=False), key))
+    c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('prices_per_gram_v1', 'true')")
 
 
 def _migrate_pricing_v2(c) -> None:
@@ -229,7 +247,7 @@ def expense(material: str | None, weight_g: float, hours: float, qty: int, setti
     """Себестоимость: только пластик по закупочной цене. Всё остальное в цене — часы печати,
     наценка на материал, брак, реверс-моделирование, ручная цена — это прибыль."""
     purchase = settings.get("purchase_prices", {}).get(material or "", 0) or 0
-    plastic = (weight_g or 0) * (qty or 1) * purchase / 1000
+    plastic = (weight_g or 0) * (qty or 1) * purchase
     time = (hours or 0) * (qty or 1) * settings["hour_rate"]
     return {"plastic": plastic, "time": time, "total": plastic}
 

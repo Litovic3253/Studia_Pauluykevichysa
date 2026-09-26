@@ -58,10 +58,10 @@ def build_customers_sheet() -> list[list[Any]]:
 
 def build_prices_sheet() -> list[list[Any]]:
     settings = db.get_settings()
-    rows: list[list[Any]] = [["Материал", "Цена за кг"]]
+    rows: list[list[Any]] = [["Материал", "Цена за грамм"]]
     rows.extend([name, price] for name, price in settings["materials"].items())
     rows.append([])
-    rows.append(["Пластик", "Закупка за кг"])
+    rows.append(["Пластик", "Закупка за грамм"])
     rows.extend([name, price] for name, price in settings["purchase_prices"].items())
     rows.append([])
     rows.append(["Параметр", "Значение"])

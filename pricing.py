@@ -135,8 +135,8 @@ def calc_price(material: str | None, weight_g: float, hours: float, qty: int, re
     """Брак — надбавка в % от стоимости печати (материал + время); на реверс-моделирование не начисляется.
     cost — себестоимость (пластик по закупке), profit — всё, что сверх неё."""
     s = db.get_settings()
-    per_kg = s["materials"].get(material or "", 0)
-    material_cost = weight_g * qty * per_kg / 1000
+    per_gram = s["materials"].get(material or "", 0)  # ₽ за грамм
+    material_cost = weight_g * qty * per_gram
     time_cost = hours * qty * s["hour_rate"]
     defect_cost = (material_cost + time_cost) * (defect_percent or 0) / 100
     reverse_cost = s["reverse_price"] if reverse else 0
@@ -161,7 +161,7 @@ def price_breakdown(material, weight_g, hours, qty, reverse: bool = False) -> st
     s = db.get_settings()
     p = calc_price(material, weight_g, hours, qty, reverse)
     lines = [
-        f"Материал: {weight_g:g} г × {qty} × {s['materials'].get(material, 0)}/кг = {money(p['material_cost'])}",
+        f"Материал: {weight_g:g} г × {qty} × {fmt_number(s['materials'].get(material, 0))}/г = {money(p['material_cost'])}",
         f"Время: {hours:g} ч × {qty} × {s['hour_rate']}/ч = {money(p['time_cost'])}",
     ]
     if reverse:

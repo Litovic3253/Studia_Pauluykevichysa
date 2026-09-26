@@ -16,11 +16,11 @@ class PricesScreen(ft.Column):
         super().__init__(expand=True, spacing=theme.SPACING, scroll=ft.ScrollMode.AUTO)
         self.materials_column = ft.Column(spacing=4)
         self.new_material_name = theme.field("Пластик", NAME_COL, hint_text="напр. TPU", dense=True)
-        self.new_material_purchase = theme.field("Закупка", PURCHASE_COL, suffix_text="₽/кг", dense=True,
+        self.new_material_purchase = theme.field("Закупка", PURCHASE_COL, suffix_text="₽/г", dense=True,
                                                  hint_text="за что купил")
-        self.new_material_price = theme.field("Цена клиенту", PRICE_COL, suffix_text="₽/кг", dense=True)
+        self.new_material_price = theme.field("Цена клиенту", PRICE_COL, suffix_text="₽/г", dense=True)
         self.hour_rate_field = theme.field("Ставка часа печати", {"xs": 12, "sm": 6}, suffix_text="₽/ч",
-                                           helper_text="Входит в себестоимость", on_blur=self._save_scalars)
+                                           helper_text="Входит в цену заказа", on_blur=self._save_scalars)
         self.reverse_price_field = theme.field("Реверс-моделирование", {"xs": 12, "sm": 6}, suffix_text="₽",
                                                helper_text="Если у клиента нет 3D-модели", on_blur=self._save_scalars)
         self.defect_field = theme.field(
@@ -37,8 +37,8 @@ class PricesScreen(ft.Column):
         materials = theme.section("Пластик: закупка и цена", [
             ft.Text("Закупка — сколько пластик стоил вам, из неё считается себестоимость и прибыль. "
                     "Цена клиенту — по ней считается цена заказа.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-            theme.grid([head("Пластик", NAME_COL), head("Закупка, за кг", PURCHASE_COL),
-                        head("Цена клиенту, за кг", PRICE_COL)], run_spacing=0),
+            theme.grid([head("Пластик", NAME_COL), head("Закупка, за грамм", PURCHASE_COL),
+                        head("Цена клиенту, за грамм", PRICE_COL)], run_spacing=0),
             self.materials_column,
             ft.Divider(height=8),
             theme.grid([
@@ -91,7 +91,7 @@ class PricesScreen(ft.Column):
 
     def _material_row(self, name: str, purchase: float | None, price: float) -> ft.Control:
         def number_field(value, col, hint: str = "") -> ft.TextField:
-            return ft.TextField(value=pricing.fmt_number(value) if value else "", dense=True, suffix_text="₽/кг",
+            return ft.TextField(value=pricing.fmt_number(value) if value else "", dense=True, suffix_text="₽/г",
                                 hint_text=hint, border_radius=theme.FIELD_RADIUS, text_align=ft.TextAlign.RIGHT,
                                 col=col, **theme.FIELD_BORDER)
 
@@ -115,10 +115,10 @@ class PricesScreen(ft.Column):
             db.set_setting(key, settings[key])
             if key == "purchase_prices":
                 db.recalc_costs()
-                self._say(f"Сохранено: закупка {name} — {pricing.fmt_number(value)} ₽/кг" if value is not None
+                self._say(f"Сохранено: закупка {name} — {pricing.fmt_number(value)} ₽/г" if value is not None
                           else f"Закупка {name} не указана")
             else:
-                self._say(f"Сохранено: {name} для клиента — {pricing.fmt_number(value)} ₽/кг")
+                self._say(f"Сохранено: {name} для клиента — {pricing.fmt_number(value)} ₽/г")
             settings = db.get_settings()
             margin_text.value = self._margin_label(settings["purchase_prices"].get(name), settings["materials"][name])
             self.update()
@@ -147,7 +147,7 @@ class PricesScreen(ft.Column):
     def _margin_label(purchase: float | None, price: float) -> str:
         if not purchase:
             return "укажите закупку"
-        return f"наценка +{pricing.money(price - purchase)}/кг"
+        return f"наценка +{pricing.fmt_number(price - purchase)} {db.get_settings()['currency']}/г"
 
     def _add_material(self, e: ft.ControlEvent) -> None:
         name = (self.new_material_name.value or "").strip()

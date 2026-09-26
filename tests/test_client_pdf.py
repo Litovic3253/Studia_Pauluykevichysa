@@ -5,8 +5,8 @@ from app import client_pdf
 
 
 def _setup():
-    db.set_setting("materials", {"PLA": 4000, "ABS": 10000})
-    db.set_setting("purchase_prices", {"PLA": 1500})
+    db.set_setting("materials", {"PLA": 4, "ABS": 10})
+    db.set_setting("purchase_prices", {"PLA": 1.5})
     db.set_setting("hour_rate", 50)
     db.set_setting("reverse_price", 1500)
 

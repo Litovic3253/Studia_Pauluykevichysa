@@ -57,7 +57,7 @@ def _order(created: str, **fields) -> int:
 
 
 def test_report_includes_only_period_orders_and_computes_profit(temp_db, tmp_path):
-    db.set_setting("purchase_prices", {"PLA": 1500})
+    db.set_setting("purchase_prices", {"PLA": 1.5})
     db.set_setting("hour_rate", 50)
     paid = _order("2026-09-05")
     db.update_order(paid, paid=1)
