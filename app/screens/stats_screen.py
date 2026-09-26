@@ -266,10 +266,12 @@ class StatsScreen(ft.Column):
                     continue
                 n = per_day.get(day.isoformat(), 0)
                 level = 0 if not n else max(1, -(-n * 4 // max(peak, 1)))
-                color = theme.DATA if day == today else HEAT[min(level, 4)]
+                # Цвет — только по числу заказов; «сегодня» отмечено рамкой, а не заливкой,
+                # иначе пустой сегодняшний день не отличить от самого загруженного.
                 cells.append(ft.Container(
-                    expand=1, height=11, border_radius=3, bgcolor=color,
-                    tooltip=f"{day.strftime('%d.%m')} · {n} зак.",
+                    expand=1, height=11, border_radius=3, bgcolor=HEAT[min(level, 4)],
+                    border=ft.border.all(1.5, ft.Colors.ON_SURFACE) if day == today else None,
+                    tooltip=f"{'сегодня' if day == today else day.strftime('%d.%m')} · {n} зак.",
                 ))
             rows.append(ft.Row([ft.Text(WEEKDAYS[wd], size=9, width=18, color=ft.Colors.ON_SURFACE_VARIANT), *cells],
                                spacing=3))
@@ -321,7 +323,7 @@ class StatsScreen(ft.Column):
             self._muted(f"маржа {margin:.0f}%"),
             self._spacer(),
             self._row([self._label("оплачено", True)], pricing.money(paid_revenue), strong=True),
-            self._row([self._label("пластик + часы")], f"−{pricing.money(s['expense'])}"),
+            self._row([self._label("пластик по закупке")], f"−{pricing.money(s['expense'])}"),
             theme.thin_bar(margin / 100, theme.OK),
         ]
         return None, body

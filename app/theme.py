@@ -153,7 +153,11 @@ def build_theme(p: Palette) -> ft.Theme:
     return ft.Theme(
         color_scheme=_scheme(p), use_material3=True, font_family=FONT_FAMILY,
         scaffold_bgcolor=p.bg,
-        tooltip_theme=ft.TooltipTheme(text_style=ft.TextStyle(size=12, font_family=FONT_FAMILY)),
+        # Подсказка — «инверсная» плашка: фон цвета текста темы, текст цвета фона, чтобы читалась в любой теме.
+        tooltip_theme=ft.TooltipTheme(
+            text_style=ft.TextStyle(size=12, font_family=FONT_FAMILY, color=p.bg),
+            decoration=ft.BoxDecoration(bgcolor=p.fg, border_radius=6),
+        ),
         **_rounded_button_themes(),
     )
 

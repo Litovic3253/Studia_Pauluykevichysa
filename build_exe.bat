@@ -18,7 +18,7 @@ echo Собираю exe (1-3 минуты)...
 set PYTHONPATH=.
 ".venv\Scripts\flet.exe" pack app\main.py --name "Студия Паулюкевичуса" --icon assets\icon.ico ^
     --product-name "Студия Паулюкевичуса" --file-description "Студия Паулюкевичуса - заказы 3D-печати" ^
-    --product-version 1.5.1 --file-version 1.5.1.0 -y --distpath dist --add-data "assets;assets" ^
+    --product-version 1.5.2 --file-version 1.5.2.0 -y --distpath dist --add-data "assets;assets" ^
     "--pyinstaller-build-args=--collect-data=googleapiclient"
 if errorlevel 1 goto :fail
 
