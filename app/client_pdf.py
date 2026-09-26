@@ -21,6 +21,9 @@ ASSETS = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent)) 
 FONTS_DIR = ASSETS / "fonts"
 LOGO = ASSETS / "icon.png"  # значок студии — тот же, что у программы
 LOGO_SIZE = 17  # мм
+# Подпись — картинка рядом с программой (не в коде и не на GitHub): чёрные линии на прозрачном фоне.
+SIGNATURE = DATA_DIR / "signature.png"
+SIGNATURE_H = 20  # мм
 
 INK = (24, 24, 27)       # основной текст
 MUTED = (113, 113, 122)  # подписи
@@ -203,9 +206,9 @@ def build_order_pdf(order_id: int, folder: Path | None = None) -> Path:
     pdf.cell(width - 40, 8, "Итого")
     pdf.cell(40, 8, _money(total), align="R", new_x="LMARGIN", new_y="NEXT")
 
-    payment = (db.get_settings().get("payment_text") or "").strip()
-    if payment:
-        _payment_box(pdf, payment, width)
+    settings = db.get_settings()
+    _bottom_block(pdf, (settings.get("payment_text") or "").strip(), (settings.get("signer_name") or "").strip(),
+                  width)
 
     folder = folder or PDF_DIR
     folder.mkdir(parents=True, exist_ok=True)
@@ -214,27 +217,50 @@ def build_order_pdf(order_id: int, folder: Path | None = None) -> Path:
     return path
 
 
-def _payment_box(pdf: FPDF, text: str, width: float) -> None:
-    """«Оплата:» и под ним строки как введены в «Ценах» (телефон, имя, банк) — в рамке цвета акцента."""
-    pdf.ln(5)
+def _bottom_block(pdf: FPDF, payment: str, signer: str, width: float) -> None:
+    """Низ документа: слева «Оплата:» в рамке, справа — подпись и под ней имя (правый нижний угол)."""
+    has_signature = SIGNATURE.exists()
+    if not (payment or signer or has_signature):
+        return
+    pay_w = width * 0.56
     pdf.set_font("mono", size=11)
-    lines = pdf.multi_cell(width - 12, 6, text, dry_run=True, output="LINES")
-    box_h = 6 * (len(lines) + 1) + 7
-    # Рамке можно опуститься ниже обычного поля — до подписи внизу страницы (она на 14 мм от края).
-    if pdf.get_y() + box_h > pdf.h - 17:
+    pay_lines = pdf.multi_cell(pay_w - 12, 6, payment, dry_run=True, output="LINES") if payment else []
+    pay_h = 6 * (len(pay_lines) + 1) + 7 if payment else 0
+    sign_h = (SIGNATURE_H if has_signature else 6) + 8
+    block_h = max(pay_h, sign_h)
+    pdf.ln(5)
+    # Блоку можно опуститься ниже обычного поля — до строки внизу страницы (она на 14 мм от края).
+    if pdf.get_y() + block_h > pdf.h - 17:
         pdf.add_page()
     y = pdf.get_y()
-    pdf.set_draw_color(*ACCENT)
-    pdf.set_line_width(0.5)
-    pdf.rect(18, y, width, box_h, style="D", round_corners=True, corner_radius=3)
-    pdf.set_line_width(0.2)
-    pdf.set_xy(24, y + 3.5)
-    pdf.set_font("mono", "B", 11)
+
+    if payment:
+        pdf.set_draw_color(*ACCENT)
+        pdf.set_line_width(0.5)
+        pdf.rect(18, y, pay_w, pay_h, style="D", round_corners=True, corner_radius=3)
+        pdf.set_line_width(0.2)
+        pdf.set_xy(24, y + 3.5)
+        pdf.set_font("mono", "B", 11)
+        pdf.set_text_color(*INK)
+        pdf.cell(0, 6, "Оплата:", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_x(24)
+        pdf.set_font("mono", size=11)
+        pdf.multi_cell(pay_w - 12, 6, payment, new_x="LMARGIN", new_y="NEXT")
+
+    # Подпись прижата к правому краю и к низу блока; под ней линия и имя.
+    right = 18 + width
+    sign_w = width - pay_w - 8
+    line_y = y + block_h - 7
+    if has_signature:
+        img_h = SIGNATURE_H
+        pdf.image(str(SIGNATURE), x=right - sign_w, y=line_y - img_h + 0.5, w=sign_w, h=img_h, keep_aspect_ratio=True)
+    pdf.set_draw_color(*MUTED)
+    pdf.line(right - sign_w, line_y, right, line_y)
+    pdf.set_xy(right - sign_w, line_y + 1.8)
+    pdf.set_font("mono", size=10)
     pdf.set_text_color(*INK)
-    pdf.cell(0, 6, "Оплата:", new_x="LMARGIN", new_y="NEXT")
-    pdf.set_x(24)
-    pdf.set_font("mono", size=11)
-    pdf.multi_cell(width - 12, 6, text, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(sign_w, 5, signer, align="R")
+    pdf.set_y(y + block_h)
 
 
 def _heading(pdf: FPDF, text: str) -> None:

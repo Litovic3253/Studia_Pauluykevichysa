@@ -18,5 +18,6 @@ def temp_db(tmp_path, monkeypatch):
     monkeypatch.setattr(db, "DB_PATH", db_path)
     from app import client_pdf
     monkeypatch.setattr(client_pdf, "PDF_DIR", tmp_path / "pdf")  # не сорить PDF-ками в папке проекта
+    monkeypatch.setattr(client_pdf, "SIGNATURE", tmp_path / "нет-подписи.png")  # без подписи владельца
     db.init()
     yield db_path

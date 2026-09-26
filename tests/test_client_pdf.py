@@ -66,16 +66,31 @@ def test_file_name_strips_unsafe_characters():
     assert client_pdf.file_name({"id": 8, "client": ""}) == "Заказ_8.pdf"
 
 
-def test_payment_line_printed_only_when_set(temp_db, tmp_path, monkeypatch):
+def test_bottom_block_gets_payment_and_signer_from_settings(temp_db, tmp_path, monkeypatch):
     _setup()
     oid = _order()
-    printed = []
-    monkeypatch.setattr(client_pdf, "_payment_box", lambda pdf, text, width: printed.append(text))
+    calls = []
+    monkeypatch.setattr(client_pdf, "_bottom_block", lambda pdf, payment, signer, width: calls.append((payment, signer)))
     client_pdf.build_order_pdf(oid, tmp_path)
-    assert printed == []
-    db.set_setting("payment_text", "89001234567 Иван Иванович банк: Сбер")
+    db.set_setting("payment_text", "+79001234567\nИван Иванович\nСбербанк")
+    db.set_setting("signer_name", "Иван Иванович И.")
     client_pdf.build_order_pdf(oid, tmp_path)
-    assert printed == ["89001234567 Иван Иванович банк: Сбер"]
+    assert calls == [("", ""), ("+79001234567\nИван Иванович\nСбербанк", "Иван Иванович И.")]
+
+
+def test_signature_image_is_drawn_when_file_exists(temp_db, tmp_path, monkeypatch):
+    from PIL import Image
+    _setup()
+    sig = tmp_path / "signature.png"
+    Image.new("RGBA", (200, 80), (0, 0, 0, 0)).save(sig)
+    monkeypatch.setattr(client_pdf, "SIGNATURE", sig)
+    db.set_setting("signer_name", "Иван Иванович И.")
+    drawn = []
+    real_image = client_pdf.FPDF.image
+    monkeypatch.setattr(client_pdf.FPDF, "image", lambda self, name, *a, **k: (drawn.append(str(name)),
+                                                                                 real_image(self, name, *a, **k)))
+    path = client_pdf.build_order_pdf(_order(), tmp_path)
+    assert str(sig) in drawn and path.read_bytes().startswith(b"%PDF")
 
 
 def test_payment_box_renders_long_text(temp_db, tmp_path):
