@@ -18,6 +18,7 @@ from app.excel_writer import export_to_excel
 from app.live_sync import LiveSync
 from app.report_dialog import ReportDialog
 from app.sidebar import Action, Destination, Sidebar
+from app.splash import Splash
 from app.theme_dialog import ThemeDialog
 from app.screens.customers_screen import CustomersScreen
 from app.screens.new_order import NewOrderScreen
@@ -77,6 +78,12 @@ def main(page: ft.Page) -> None:
     current_theme_mode = theme.normalize_theme(db.get_settings().get("theme_mode"))
     theme.apply_theme(page, current_theme_mode)
 
+    # Экран загрузки — первым делом, пока создаются экраны и подтягиваются данные.
+    splash = Splash(APP_NAME, "заказы 3D-печати")
+    page.add(splash)
+    splash.start()
+    splash.step(12, "Загружаю заказы…")
+
     def go_to_new_order() -> None:
         nav_rail.selected_index = 1
         on_nav_change(None)
@@ -88,10 +95,15 @@ def main(page: ft.Page) -> None:
         orders_section._open_order(order_id)
 
     orders_section = OrdersSection(on_new_order=go_to_new_order)
+    splash.step(28, "Загружаю клиентов…")
     customers_screen = CustomersScreen(on_open_order=open_order_from_anywhere)
+    splash.step(40, "Загружаю цены…")
     prices_screen = PricesScreen()
+    splash.step(55, "Считаю статистику…")
     stats_screen = StatsScreen()
+    splash.step(68, "Готовлю новый заказ…")
     new_order_screen = NewOrderScreen(on_created=open_order_from_anywhere)
+    splash.step(78, "Загружаю катушки пластика…")
     spools_screen = SpoolsScreen()
 
     def add_spool_of(plastic: str) -> None:
@@ -99,7 +111,9 @@ def main(page: ft.Page) -> None:
         on_nav_change(None)
         spools_screen.preselect(plastic)
 
+    splash.step(86, "Загружаю справочник пластика…")
     plastics_screen = PlasticsScreen(on_add_spool=add_spool_of)
+    splash.step(92, "Собираю меню…")
 
     sections = [orders_section, new_order_screen, customers_screen, plastics_screen, spools_screen,
                 prices_screen, stats_screen]
@@ -210,11 +224,14 @@ def main(page: ft.Page) -> None:
         sheets_sync.sync_in_background()
 
     page.pubsub.subscribe(lambda _: on_db_changed())
+    splash.step(97, "Запускаю синхронизацию…")
     live_sync = LiveSync(on_change=lambda: page.pubsub.send_all("db_changed"), interval=3.0)
     live_sync.start()
     sheets_sync.sync_in_background()  # таблица актуальна сразу после запуска, а не только после первой правки
     page.on_disconnect = lambda e: live_sync.stop()
 
+    splash.finish()
+    page.controls.clear()
     # STRETCH — меню во всю высоту окна (иначе Row центрирует его по вертикали).
     page.add(ft.Row([nav_rail, ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT), content],
                     expand=True, spacing=0, vertical_alignment=ft.CrossAxisAlignment.STRETCH))
