@@ -126,7 +126,8 @@ class OrderDetailScreen(ft.Column):
         self.header.content = theme.page_header(
             f"Заказ #{self.order_id} · {order['client']}",
             f"создан {pricing.fmt_date(order['created_at'][:10])}",
-            [ft.OutlinedButton("Удалить заказ", icon=ft.Icons.DELETE_OUTLINE, on_click=self._on_delete_click,
+            [ft.OutlinedButton("Номер и дата", icon=ft.Icons.EDIT_OUTLINED, on_click=self._on_edit_number_date),
+             ft.OutlinedButton("Удалить заказ", icon=ft.Icons.DELETE_OUTLINE, on_click=self._on_delete_click,
                                style=ft.ButtonStyle(color=theme.ERR))],
             leading=ft.IconButton(ft.Icons.ARROW_BACK, tooltip=theme.tip("К списку"), on_click=lambda e: self.on_back()),
         )
@@ -374,6 +375,50 @@ class OrderDetailScreen(ft.Column):
         pricing.recalc_order_price(self.order_id)
         self.refresh()
 
+    def _on_edit_number_date(self, e: ft.ControlEvent | None) -> None:
+        """Окно «Номер и дата»: номер заказа (переносится со вложениями и списаниями) и дата создания."""
+        order = db.get_order(self.order_id)
+        number_field = theme.field("Номер заказа", {"xs": 12}, value=str(self.order_id), prefix_text="#",
+                                   keyboard_type=ft.KeyboardType.NUMBER, autofocus=True,
+                                   helper_text="Должен быть свободен — не занят другим заказом")
+        date_field = input_hints.date_field("Дата создания", col={"xs": 12},
+                                            value=pricing.fmt_date(order["created_at"][:10]),
+                                            helper_text="дд.мм.гггг — от неё зависят смета и статистика")
+
+        def save(e2: ft.ControlEvent) -> None:
+            number_field.error_text = date_field.error_text = None
+            text = (number_field.value or "").strip().lstrip("#")
+            number = int(text) if text.isdigit() else 0
+            day = _parse_created_date(date_field.value)
+            if number < 1:
+                number_field.error_text = "Введите целое число больше нуля"
+            if not day:
+                date_field.error_text = "Не понял дату. Пример: 25.09.2026"
+            if number_field.error_text or date_field.error_text:
+                dialog.update()
+                return
+            try:
+                db.renumber_order(self.order_id, number, storage_dir=LOCAL_STORAGE)
+            except ValueError as exc:
+                number_field.error_text = str(exc)
+                dialog.update()
+                return
+            self.order_id = number
+            if day != order["created_at"][:10]:
+                db.set_order_created(self.order_id, day)
+            self.page.close(dialog)
+            self.refresh()
+            self.update()
+
+        number_field.on_submit = save
+        dialog = ft.AlertDialog(
+            title=ft.Text("Номер и дата заказа"),
+            content=ft.Container(theme.grid([number_field, date_field]), width=380),
+            actions=[ft.TextButton("Отмена", on_click=lambda e2: self.page.close(dialog)),
+                     ft.FilledButton("Сохранить", on_click=save)],
+        )
+        self.page.open(dialog)
+
     def _on_delete_click(self, e: ft.ControlEvent) -> None:
         def confirm(e2: ft.ControlEvent) -> None:
             self.page.close(dialog)
@@ -390,3 +435,20 @@ class OrderDetailScreen(ft.Column):
                      ft.TextButton("Удалить", on_click=confirm, style=ft.ButtonStyle(color=theme.ERR))],
         )
         self.page.open(dialog)
+
+
+def _parse_created_date(text: str | None) -> str | None:
+    """Дата создания: «дд.мм.гггг», «сегодня», «25.09». В отличие от срока, «25.09» без года —
+    это прошедшее 25 сентября, а не следующее: дата создания не бывает в будущем."""
+    import re
+    from datetime import date
+
+    t = (text or "").strip()
+    iso = pricing.parse_date(t)
+    if iso and re.fullmatch(r"\d{1,2}[./-]\d{1,2}", t) and date.fromisoformat(iso) > date.today():
+        try:
+            d = date.fromisoformat(iso)
+            iso = d.replace(year=d.year - 1).isoformat()
+        except ValueError:  # 29.02 в невисокосный год
+            return None
+    return iso

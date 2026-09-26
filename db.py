@@ -1,5 +1,6 @@
 """Хранилище заказов и настроек (SQLite)."""
 import json
+import shutil
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -377,6 +378,65 @@ def update_order(order_id: int, **fields) -> None:
     sets = ", ".join(f"{k} = ?" for k in fields)
     with _conn() as c:
         c.execute(f"UPDATE orders SET {sets} WHERE id = ?", [*fields.values(), order_id])
+
+
+def renumber_order(old_id: int, new_id: int, storage_dir: Path | None = None) -> None:
+    """Меняет номер заказа (он же id) вместе со всем, что на него ссылается: вложения,
+    списания пластика, папка files_storage/<номер>. Счётчик новых заказов продолжится
+    после самого большого номера. ValueError — если номер некорректный или уже занят."""
+    if new_id == old_id:
+        return
+    if new_id < 1:
+        raise ValueError("Номер должен быть целым числом больше нуля")
+    storage = storage_dir or DATA_DIR / "files_storage"
+    old_dir, new_dir = storage / str(old_id), storage / str(new_id)
+    with _conn() as c:
+        if not c.execute("SELECT 1 FROM orders WHERE id = ?", (old_id,)).fetchone():
+            raise ValueError(f"Заказа #{old_id} нет")
+        if c.execute("SELECT 1 FROM orders WHERE id = ?", (new_id,)).fetchone():
+            raise ValueError(f"Номер #{new_id} уже занят другим заказом")
+    moved = _move_files(old_dir, new_dir)
+    try:
+        with _conn() as c:
+            c.execute("UPDATE orders SET id = ?, updated_at = ? WHERE id = ?",
+                      (new_id, datetime.now().isoformat(), old_id))
+            c.execute("UPDATE spool_usage SET order_id = ? WHERE order_id = ?", (new_id, old_id))
+            for a in c.execute("SELECT id, local_path FROM attachments WHERE order_id = ?", (old_id,)).fetchall():
+                path = a["local_path"]
+                if path and Path(path).parent == old_dir:
+                    path = str(new_dir / Path(path).name)
+                c.execute("UPDATE attachments SET order_id = ?, local_path = ? WHERE id = ?", (new_id, path, a["id"]))
+            # AUTOINCREMENT берёт следующий номер из sqlite_sequence — UPDATE его не двигает.
+            c.execute("UPDATE sqlite_sequence SET seq = MAX(seq, ?) WHERE name = 'orders'", (new_id,))
+    except Exception:
+        _move_files(new_dir, old_dir, only=moved)  # вернуть файлы, если база не обновилась
+        raise
+
+
+def _move_files(src: Path, dst: Path, only: list[str] | None = None) -> list[str]:
+    """Переносит файлы из папки src в dst (dst может уже существовать); возвращает имена перенесённых."""
+    if not src.is_dir():
+        return []
+    dst.mkdir(parents=True, exist_ok=True)
+    moved = []
+    for f in list(src.iterdir()):
+        if only is not None and f.name not in only:
+            continue
+        target = dst / f.name
+        if target.exists():
+            target = dst / f"{src.name}_{f.name}"
+        shutil.move(str(f), str(target))
+        moved.append(target.name)
+    if not any(src.iterdir()):
+        src.rmdir()
+    return moved
+
+
+def set_order_created(order_id: int, day: str) -> None:
+    """Меняет дату создания заказа (ISO «ГГГГ-ММ-ДД»), время создания сохраняется."""
+    order = get_order(order_id)
+    time_part = order["created_at"][10:] if order and len(order["created_at"]) > 10 else "T12:00:00"
+    update_order(order_id, created_at=f"{day}{time_part}")
 
 
 def delete_order(order_id: int) -> None:
