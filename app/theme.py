@@ -153,11 +153,7 @@ def build_theme(p: Palette) -> ft.Theme:
     return ft.Theme(
         color_scheme=_scheme(p), use_material3=True, font_family=FONT_FAMILY,
         scaffold_bgcolor=p.bg,
-        # Подсказка — «инверсная» плашка: фон цвета текста темы, текст цвета фона, чтобы читалась в любой теме.
-        tooltip_theme=ft.TooltipTheme(
-            text_style=ft.TextStyle(size=12, font_family=FONT_FAMILY, color=p.bg),
-            decoration=ft.BoxDecoration(bgcolor=p.fg, border_radius=6),
-        ),
+        tooltip_theme=ft.TooltipTheme(text_style=ft.TextStyle(size=12, font_family=FONT_FAMILY)),
         **_rounded_button_themes(),
     )
 
@@ -194,6 +190,22 @@ def apply_theme(page: ft.Page, value: str | None) -> None:
     p = PALETTES[key]
     page.theme = page.dark_theme = build_theme(p)
     page.theme_mode = ft.ThemeMode.DARK if p.dark else ft.ThemeMode.LIGHT
+
+
+def tip(text: str | None) -> ft.Tooltip | None:
+    """Подсказка при наведении: текст цвета текста темы на подложке цвета фона, тонкая рамка.
+    Во Flet 0.27 подсказка-строка игнорирует TooltipTheme (выходит прозрачной и бледной),
+    поэтому стиль задаётся каждой подсказке явно. Фон — токен on_inverse_surface: в _scheme
+    он равен фону темы (p.bg), так что подсказка перекрашивается вместе с темой."""
+    if not text:
+        return None
+    return ft.Tooltip(
+        message=text, bgcolor=ft.Colors.ON_INVERSE_SURFACE, border_radius=6,
+        border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
+        padding=ft.padding.symmetric(horizontal=10, vertical=6),
+        text_style=ft.TextStyle(size=12, font_family=FONT_FAMILY, color=ft.Colors.ON_SURFACE),
+        wait_duration=300,
+    )
 
 
 def add_hover(container: ft.Container, lift: bool = False) -> ft.Container:

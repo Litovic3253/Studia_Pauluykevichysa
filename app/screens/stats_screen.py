@@ -199,7 +199,7 @@ class StatsScreen(ft.Column):
         meta, body = getattr(self, f"_w_{widget_id}")()
         menu = ft.PopupMenuButton(
             icon=ft.Icons.DRAG_INDICATOR, icon_size=16, icon_color=ft.Colors.ON_SURFACE_VARIANT,
-            tooltip="Переместить виджет", menu_position=ft.PopupMenuPosition.UNDER,
+            tooltip=theme.tip("Переместить виджет"), menu_position=ft.PopupMenuPosition.UNDER,
             items=[
                 ft.PopupMenuItem(text="Сдвинуть влево", icon=ft.Icons.ARROW_BACK,
                                  on_click=lambda e: self._apply_order(shift(self.order, widget_id, -1), widget_id)),
@@ -271,7 +271,7 @@ class StatsScreen(ft.Column):
                 cells.append(ft.Container(
                     expand=1, height=11, border_radius=3, bgcolor=HEAT[min(level, 4)],
                     border=ft.border.all(1.5, ft.Colors.ON_SURFACE) if day == today else None,
-                    tooltip=f"{'сегодня' if day == today else day.strftime('%d.%m')} · {n} зак.",
+                    tooltip=theme.tip(f"{'сегодня' if day == today else day.strftime('%d.%m')} · {n} зак."),
                 ))
             rows.append(ft.Row([ft.Text(WEEKDAYS[wd], size=9, width=18, color=ft.Colors.ON_SURFACE_VARIANT), *cells],
                                spacing=3))
@@ -300,7 +300,7 @@ class StatsScreen(ft.Column):
             bars.append(ft.Container(
                 expand=1, height=max(4, 44 * value / peak), border_radius=6,
                 bgcolor=theme.DATA if last else ft.Colors.with_opacity(0.15, ft.Colors.ON_SURFACE),
-                tooltip=f"{MONTHS[int(ym[5:]) - 1]} {ym[:4]}: {pricing.money(value)}",
+                tooltip=theme.tip(f"{MONTHS[int(ym[5:]) - 1]} {ym[:4]}: {pricing.money(value)}"),
                 animate_size=ft.animation.Animation(600, ft.AnimationCurve.EASE_OUT_CUBIC),
             ))
         labels = ft.Row([ft.Text(MONTHS[int(ym[5:]) - 1], size=9, expand=1, text_align=ft.TextAlign.CENTER,
@@ -403,7 +403,7 @@ class StatsScreen(ft.Column):
         ]
         segments = ft.Row([
             ft.Container(expand=max(1, round(g / grams * 100)) if grams else 1, height=3, border_radius=3,
-                         bgcolor=swatches[i], tooltip=f"{name}: {g / 1000:.2f} кг")
+                         bgcolor=swatches[i], tooltip=theme.tip(f"{name}: {g / 1000:.2f} кг"))
             for i, (name, g) in enumerate(parts)
         ], spacing=3)
         body = [theme.big_number(f"{grams / 1000:.2f}", "кг напечатано"), self._spacer(),

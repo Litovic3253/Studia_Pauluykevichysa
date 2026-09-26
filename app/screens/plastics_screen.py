@@ -173,7 +173,7 @@ class PlasticsScreen(ft.Column):
             ft.Text(label, size=12, width=110, color=ft.Colors.ON_SURFACE_VARIANT),
             ft.Container(ft.ProgressBar(value=value / 5, bar_height=6, border_radius=3), expand=True),
             ft.Text(text, size=12, width=120, text_align=ft.TextAlign.RIGHT,
-                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, tooltip=text),
+                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, tooltip=theme.tip(text)),
         ], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
     def _detail(self, label: str, text: str, icon, color) -> ft.Control:

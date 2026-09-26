@@ -75,7 +75,7 @@ class ThemeDialog:
                       spacing=8, tight=True),
             bgcolor=bg, border_radius=14, padding=10, col=SWATCH_COL,
             border=ft.border.all(2, ft.Colors.PRIMARY) if selected else ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
-            on_click=lambda e, k=key: self._pick(k), tooltip=theme.theme_name(key),
+            on_click=lambda e, k=key: self._pick(k), tooltip=theme.tip(theme.theme_name(key)),
         )
 
     def _render(self) -> None:

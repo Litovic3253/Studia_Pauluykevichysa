@@ -128,7 +128,7 @@ class OrderDetailScreen(ft.Column):
             f"создан {pricing.fmt_date(order['created_at'][:10])}",
             [ft.OutlinedButton("Удалить заказ", icon=ft.Icons.DELETE_OUTLINE, on_click=self._on_delete_click,
                                style=ft.ButtonStyle(color=theme.ERR))],
-            leading=ft.IconButton(ft.Icons.ARROW_BACK, tooltip="К списку", on_click=lambda e: self.on_back()),
+            leading=ft.IconButton(ft.Icons.ARROW_BACK, tooltip=theme.tip("К списку"), on_click=lambda e: self.on_back()),
         )
 
         materials = list(db.get_settings()["materials"])
@@ -247,14 +247,14 @@ class OrderDetailScreen(ft.Column):
     def _attachment_row(self, a) -> ft.Control:
         label = a["filename"] or a["file_id"] or f"вложение #{a['id']}"
         icon = FILE_ICONS.get(Path(label).suffix.lower(), ft.Icons.INSERT_DRIVE_FILE_OUTLINED)
-        actions = [ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip="Удалить файл",
+        actions = [ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip=theme.tip("Удалить файл"),
                                  on_click=lambda e, aid=a["id"]: self._delete_attachment(aid))]
         if a["local_path"]:
-            actions.insert(0, ft.IconButton(ft.Icons.OPEN_IN_NEW, tooltip="Открыть",
+            actions.insert(0, ft.IconButton(ft.Icons.OPEN_IN_NEW, tooltip=theme.tip("Открыть"),
                                             on_click=lambda e, a=a: self._open_path(str(resolve_attachment_path(a)))))
         return ft.Row([
             ft.Icon(icon, size=20, color=ft.Colors.PRIMARY),
-            ft.Text(label, expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, tooltip=label),
+            ft.Text(label, expand=True, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, tooltip=theme.tip(label)),
             *actions,
         ], spacing=8)
 

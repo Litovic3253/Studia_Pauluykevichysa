@@ -86,7 +86,7 @@ class Sidebar(ft.Container):
             body, height=ITEM_HEIGHT, border_radius=10, bgcolor=base, on_click=on_click,
             padding=ft.padding.symmetric(horizontal=12 if self.extended else 0),
             alignment=ft.alignment.center_left if self.extended else ft.alignment.center,
-            tooltip=None if self.extended else label,
+            tooltip=theme.tip(None if self.extended else label),
             animate=ft.animation.Animation(150, ft.AnimationCurve.EASE_OUT),
         )
 

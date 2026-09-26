@@ -4,6 +4,7 @@ from typing import Callable
 import flet as ft
 
 import pricing
+from app import theme
 
 WEIGHT_EXAMPLES = ["454,28", "454.28", "454,28 г", "50"]
 HOURS_EXAMPLES = ["2.5", "2ч 30м", "2ч 30 мин", "2:30", "150 мин", "1д 6ч 46м"]
@@ -23,7 +24,7 @@ def _examples_menu(field: ft.TextField, examples: list[str], describe: Callable[
 
     return ft.PopupMenuButton(
         icon=ft.Icons.HELP_OUTLINE,
-        tooltip="Как заполнять — нажмите на пример, чтобы подставить",
+        tooltip=theme.tip("Как заполнять — нажмите на пример, чтобы подставить"),
         items=[ft.PopupMenuItem(text=describe(ex), on_click=lambda e, ex=ex: pick(ex)) for ex in examples],
     )
 
@@ -76,8 +77,6 @@ def date_field(label: str, on_pick: Callable[[], None] | None = None, col=None, 
     справа — календарь; выбранная дата сразу вписывается в поле, затем вызывается on_pick."""
     from datetime import date, datetime
 
-    from app import theme
-
     user_on_change = kwargs.pop("on_change", None)
     field = theme.field(label, col, **kwargs)
 
@@ -113,7 +112,7 @@ def date_field(label: str, on_pick: Callable[[], None] | None = None, col=None, 
 
     field.on_change = on_change
     # suffix_icon, а не suffix: кнопка в suffix делает поле выше соседних.
-    field.suffix_icon = ft.IconButton(ft.Icons.CALENDAR_MONTH_OUTLINED, icon_size=18, tooltip="Выбрать в календаре",
+    field.suffix_icon = ft.IconButton(ft.Icons.CALENDAR_MONTH_OUTLINED, icon_size=18, tooltip=theme.tip("Выбрать в календаре"),
                                  on_click=open_calendar)
     field.data = picker  # для тестов и повторного открытия
     return field

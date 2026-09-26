@@ -126,14 +126,14 @@ class SpoolsScreen(ft.Column):
             actions = [
                 ft.TextButton("Вернуть", icon=ft.Icons.UNARCHIVE_OUTLINED,
                               on_click=lambda e, sid=s["id"]: self._archive(sid, False)),
-                ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip="Удалить навсегда",
+                ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip=theme.tip("Удалить навсегда"),
                               on_click=lambda e, sid=s["id"]: self._confirm_delete(sid, title)),
             ]
         else:
             actions = [
                 ft.FilledTonalButton("Списать", icon=ft.Icons.REMOVE, on_click=lambda e, sp=s: self._ask_use(sp)),
                 ft.TextButton("Сверить", icon=ft.Icons.SCALE_OUTLINED, on_click=lambda e, sp=s: self._ask_weigh(sp)),
-                ft.IconButton(ft.Icons.ARCHIVE_OUTLINED, tooltip="В архив (катушка закончилась)",
+                ft.IconButton(ft.Icons.ARCHIVE_OUTLINED, tooltip=theme.tip("В архив (катушка закончилась)"),
                               on_click=lambda e, sid=s["id"]: self._archive(sid, True)),
             ]
         color = theme.ERR if remaining <= 0 else theme.WARN if low else theme.OK
@@ -156,7 +156,7 @@ class SpoolsScreen(ft.Column):
             ft.Column([ft.Text(what, size=13), ft.Text(reason, size=11, color=ft.Colors.ON_SURFACE_VARIANT)],
                       spacing=0, tight=True, expand=True),
             ft.Text(f"{sign}{grams(abs(u['grams']))}", weight=ft.FontWeight.W_600),
-            ft.IconButton(ft.Icons.UNDO, tooltip="Отменить списание (вернуть граммы на катушку)",
+            ft.IconButton(ft.Icons.UNDO, tooltip=theme.tip("Отменить списание (вернуть граммы на катушку)"),
                           on_click=lambda e, uid=u["id"]: self._undo(uid)),
         ], spacing=8)
 

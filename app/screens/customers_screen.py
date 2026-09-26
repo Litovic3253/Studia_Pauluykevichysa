@@ -142,7 +142,7 @@ class CustomersScreen(ft.Column):
 
         title_row = [ft.Text(customer["name"], size=20, weight=ft.FontWeight.W_700, expand=True)]
         if self.compact:
-            title_row.insert(0, ft.IconButton(ft.Icons.ARROW_BACK, tooltip="К списку",
+            title_row.insert(0, ft.IconButton(ft.Icons.ARROW_BACK, tooltip=theme.tip("К списку"),
                                               on_click=lambda e: self._close_customer()))
         title_row.append(ft.OutlinedButton(
             "Удалить клиента", icon=ft.Icons.DELETE_OUTLINE,
@@ -183,7 +183,7 @@ class CustomersScreen(ft.Column):
             ], spacing=10),
             padding=ft.padding.symmetric(horizontal=10, vertical=8), border_radius=10,
             on_click=(lambda e, oid=o["id"]: self.on_open_order(oid)) if self.on_open_order else None,
-            ink=bool(self.on_open_order), tooltip="Открыть заказ" if self.on_open_order else None,
+            ink=bool(self.on_open_order), tooltip=theme.tip("Открыть заказ" if self.on_open_order else None),
         )
 
     def _save_identity(self, customer_id: int) -> None:

@@ -44,7 +44,7 @@ class PricesScreen(ft.Column):
             theme.grid([
                 self.new_material_name, self.new_material_purchase, self.new_material_price,
                 ft.Container(ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.PRIMARY, icon_size=30,
-                                           tooltip="Добавить пластик", on_click=self._add_material),
+                                           tooltip=theme.tip("Добавить пластик"), on_click=self._add_material),
                              col=ACTION_COL, alignment=ft.alignment.center_left),
             ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
         ], icon=ft.Icons.INVENTORY_2_OUTLINED, col={"xs": 12, "lg": 7})
@@ -137,7 +137,7 @@ class PricesScreen(ft.Column):
         row = theme.grid([
             ft.Column([ft.Text(name, weight=ft.FontWeight.W_600), margin_text], spacing=0, tight=True, col=NAME_COL),
             purchase_field, price_field,
-            ft.Container(ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip=f"Удалить {name}", on_click=delete),
+            ft.Container(ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip=theme.tip(f"Удалить {name}"), on_click=delete),
                          col=ACTION_COL, alignment=ft.alignment.center_left),
         ], vertical_alignment=ft.CrossAxisAlignment.CENTER, run_spacing=6)
         return theme.add_hover(ft.Container(row, padding=ft.padding.symmetric(horizontal=8, vertical=6),

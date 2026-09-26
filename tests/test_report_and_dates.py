@@ -104,4 +104,4 @@ def test_sidebar_selects_item_and_reports_change():
     bar.content.controls[-1].on_click("x")
     assert clicked == ["x"]
     bar.set_layout(False, None, [])
-    assert bar.width == 72 and bar.content.controls[0].tooltip == "Один"
+    assert bar.width == 72 and bar.content.controls[0].tooltip.message == "Один"

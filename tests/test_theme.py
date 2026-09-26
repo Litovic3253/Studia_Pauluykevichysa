@@ -129,3 +129,14 @@ def _walk(control):
 
 def _texts(control):
     return [c.value for c in _walk(control) if isinstance(c, ft.Text)]
+
+
+def test_tip_uses_theme_text_on_theme_background():
+    t = theme.tip("Привет")
+    assert isinstance(t, ft.Tooltip) and t.message == "Привет"
+    assert t.bgcolor == ft.Colors.ON_INVERSE_SURFACE
+    assert t.text_style.color == ft.Colors.ON_SURFACE
+    assert theme.tip(None) is None and theme.tip("") is None
+    # on_inverse_surface в каждой теме — это цвет фона, так что подложка = фон темы
+    for p in theme.PALETTES.values():
+        assert theme._scheme(p).on_inverse_surface == p.bg
