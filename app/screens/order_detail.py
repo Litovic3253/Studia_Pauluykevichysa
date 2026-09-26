@@ -50,7 +50,7 @@ class OrderDetailScreen(ft.Column):
         self.client_field = theme.field("Клиент", half, on_blur=self._on_client_blur)
         self.contact_field = theme.field("Контакт", half, on_blur=self._on_client_blur)
         self.customer_dd = theme.dropdown("Карточка клиента", width=300, on_change=self._on_customer_change)
-        self.material_field = theme.dropdown("Материал", on_change=self._on_price_fields_blur)
+        self.material_field = theme.dropdown("Материал", stretch=True, col=half, on_change=self._on_price_fields_blur)
         self.color_field = theme.field("Цвет", half, on_blur=self._on_other_field_blur, value="")
         self.weight_field = input_hints.weight_field(
             on_blur=self._on_price_fields_blur, on_pick=lambda: self._on_price_fields_blur(None), col=half,
@@ -83,7 +83,7 @@ class OrderDetailScreen(ft.Column):
                                                  theme.in_col(self.customer_dd, {"xs": 12})])],
                           icon=ft.Icons.PERSON_OUTLINE),
             theme.section("Печать", [theme.grid([
-                theme.in_col(self.material_field, half), self.color_field, self.weight_field, self.hours_field,
+                self.material_field, self.color_field, self.weight_field, self.hours_field,
                 self.qty_field, self.defect_field, self.deadline_field, self.notes_field,
             ]), ft.Divider(height=4), self.usage_row], icon=ft.Icons.PRECISION_MANUFACTURING),
         ], spacing=theme.SPACING, col={"xs": 12, "lg": 7})

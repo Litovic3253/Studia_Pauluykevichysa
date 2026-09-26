@@ -7,7 +7,7 @@ from app import input_hints
 def test_weight_field_has_examples_menu_that_fills_the_field():
     picked = []
     field = input_hints.weight_field(on_pick=lambda: picked.append(True))
-    menu = field.suffix
+    menu = field.suffix_icon
     assert isinstance(menu, ft.PopupMenuButton)
     texts = [item.text for item in menu.items]
     assert any("454,28" in t for t in texts)
@@ -20,7 +20,7 @@ def test_weight_field_has_examples_menu_that_fills_the_field():
 
 def test_hours_menu_shows_how_each_example_converts():
     field = input_hints.hours_field()
-    texts = [item.text for item in field.suffix.items]
+    texts = [item.text for item in field.suffix_icon.items]
     assert "2ч 30м  →  2,5 ч" in texts
     assert "1д 6ч 46м  →  30,77 ч" in texts
 

@@ -307,11 +307,19 @@ def grid(controls: Iterable[ft.Control], **kwargs) -> ft.ResponsiveRow:
     return ft.ResponsiveRow(list(controls), **defaults)
 
 
-def dropdown(label: str, width: int = 240, **kwargs) -> ft.Dropdown:
+def dropdown(label: str, width: int = 240, stretch: bool = False, **kwargs) -> ft.Dropdown | ft.DropdownM2:
     """Выпадающий список в едином стиле. В Flet 0.27 Dropdown (M3 DropdownMenu) не растягивается
-    по колонке, а без ширины сжимается по содержимому («Мате / риал») — поэтому ширина фиксированная."""
-    defaults = dict(label=label, border_radius=FIELD_RADIUS, width=width, text_size=14,
-                    border_color=ft.Colors.OUTLINE, focused_border_color=ft.Colors.ON_SURFACE)
+    по колонке, а без ширины сжимается по содержимому («Мате / риал») — поэтому ширина фиксированная.
+    stretch=True — во всю ширину колонки сетки, как соседние поля: DropdownM2 (DropdownButtonFormField)
+    с тем же API (options / value / on_change); col передаётся в kwargs."""
+    defaults = dict(label=label, border_radius=FIELD_RADIUS, text_size=14,
+                    border_color=ft.Colors.OUTLINE, focused_border_color=ft.Colors.ON_SURFACE,
+                    label_style=ft.TextStyle(size=13, color=ft.Colors.ON_SURFACE_VARIANT))
+    if stretch:
+        defaults.update(focused_border_width=1.5, bgcolor=ft.Colors.SURFACE)
+        defaults.update(kwargs)
+        return ft.DropdownM2(**defaults)
+    defaults["width"] = width
     defaults.update(kwargs)
     return ft.Dropdown(**defaults)
 

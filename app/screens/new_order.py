@@ -25,7 +25,7 @@ class NewOrderScreen(ft.Column):
         self.client_field = theme.field("Клиент *", half)
         self.contact_field = theme.field("Контакт", half, hint_text="телефон, @ник, авито…")
         self.description_field = theme.field("Описание", {"xs": 12}, multiline=True, min_lines=2)
-        self.material_dd = theme.dropdown("Материал", on_change=self._recalc)
+        self.material_dd = theme.dropdown("Материал", stretch=True, col=half, on_change=self._recalc)
         self.color_field = theme.field("Цвет", half)
         self.weight_field = input_hints.weight_field(
             value="0", on_change=self._recalc, on_pick=lambda: self._recalc(None), col=half,
@@ -56,7 +56,7 @@ class NewOrderScreen(ft.Column):
             theme.section("Клиент", [theme.grid([self.client_field, self.contact_field, self.description_field])],
                           icon=ft.Icons.PERSON_OUTLINE),
             theme.section("Печать", [
-                theme.grid([theme.in_col(self.material_dd, half), self.color_field, self.weight_field, self.hours_field,
+                theme.grid([self.material_dd, self.color_field, self.weight_field, self.hours_field,
                             self.qty_field, self.defect_field, self.deadline_field]),
                 self.reverse_checkbox,
             ], icon=ft.Icons.PRECISION_MANUFACTURING),

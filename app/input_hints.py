@@ -30,7 +30,7 @@ def _examples_menu(field: ft.TextField, examples: list[str], describe: Callable[
 
 def weight_field(on_pick: Callable[[], None] | None = None, **kwargs) -> ft.TextField:
     field = ft.TextField(label="Вес, г", helper_text=WEIGHT_HELP, border_radius=10, **kwargs)
-    field.suffix = _examples_menu(
+    field.suffix_icon = _examples_menu(
         field, WEIGHT_EXAMPLES,
         lambda ex: f"{ex}  →  {pricing.fmt_number(pricing.parse_weight(ex))} г", on_pick,
     )
@@ -39,7 +39,7 @@ def weight_field(on_pick: Callable[[], None] | None = None, **kwargs) -> ft.Text
 
 def hours_field(on_pick: Callable[[], None] | None = None, **kwargs) -> ft.TextField:
     field = ft.TextField(label="Часы печати", helper_text=HOURS_HELP, border_radius=10, **kwargs)
-    field.suffix = _examples_menu(
+    field.suffix_icon = _examples_menu(
         field, HOURS_EXAMPLES,
         lambda ex: f"{ex}  →  {pricing.fmt_number(pricing.parse_hours(ex))} ч", on_pick,
     )
@@ -112,7 +112,8 @@ def date_field(label: str, on_pick: Callable[[], None] | None = None, col=None, 
         field.page.open(picker)
 
     field.on_change = on_change
-    field.suffix = ft.IconButton(ft.Icons.CALENDAR_MONTH_OUTLINED, icon_size=18, tooltip="Выбрать в календаре",
+    # suffix_icon, а не suffix: кнопка в suffix делает поле выше соседних.
+    field.suffix_icon = ft.IconButton(ft.Icons.CALENDAR_MONTH_OUTLINED, icon_size=18, tooltip="Выбрать в календаре",
                                  on_click=open_calendar)
     field.data = picker  # для тестов и повторного открытия
     return field
