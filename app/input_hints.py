@@ -30,7 +30,7 @@ def _examples_menu(field: ft.TextField, examples: list[str], describe: Callable[
 
 
 def weight_field(on_pick: Callable[[], None] | None = None, **kwargs) -> ft.TextField:
-    field = ft.TextField(label="Вес, г", helper_text=WEIGHT_HELP, border_radius=10, **kwargs)
+    field = theme.field("Вес, г", kwargs.pop("col", None), helper_text=WEIGHT_HELP, **kwargs)
     field.suffix_icon = _examples_menu(
         field, WEIGHT_EXAMPLES,
         lambda ex: f"{ex}  →  {pricing.fmt_number(pricing.parse_weight(ex))} г", on_pick,
@@ -39,7 +39,7 @@ def weight_field(on_pick: Callable[[], None] | None = None, **kwargs) -> ft.Text
 
 
 def hours_field(on_pick: Callable[[], None] | None = None, **kwargs) -> ft.TextField:
-    field = ft.TextField(label="Часы печати", helper_text=HOURS_HELP, border_radius=10, **kwargs)
+    field = theme.field("Часы печати", kwargs.pop("col", None), helper_text=HOURS_HELP, **kwargs)
     field.suffix_icon = _examples_menu(
         field, HOURS_EXAMPLES,
         lambda ex: f"{ex}  →  {pricing.fmt_number(pricing.parse_hours(ex))} ч", on_pick,

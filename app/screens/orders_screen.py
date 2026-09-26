@@ -44,7 +44,7 @@ class OrdersScreen(ft.Column):
         )
         self.search_field = ft.TextField(
             hint_text="Поиск: клиент, контакт, описание", prefix_icon=ft.Icons.SEARCH,
-            border_radius=theme.FIELD_RADIUS, dense=True, on_change=self._on_search_change,
+            border_radius=theme.FIELD_RADIUS, dense=True, on_change=self._on_search_change, **theme.FIELD_BORDER,
             col={"xs": 12, "lg": 5},
         )
         self.header = ft.Container()

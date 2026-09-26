@@ -22,7 +22,7 @@ class CustomersScreen(ft.Column):
         self.header = ft.Container()
         self.search_field = ft.TextField(
             hint_text="Поиск клиента", prefix_icon=ft.Icons.SEARCH, border_radius=theme.FIELD_RADIUS,
-            dense=True, on_change=self._on_search,
+            dense=True, on_change=self._on_search, **theme.FIELD_BORDER,
         )
         self.list_view = ft.ListView(expand=True, spacing=8, padding=ft.padding.only(bottom=theme.SPACING))
         self.list_panel = ft.Column([self.search_field, self.list_view], expand=5, spacing=12)

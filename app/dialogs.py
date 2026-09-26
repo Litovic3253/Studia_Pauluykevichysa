@@ -9,7 +9,7 @@ def grams_dialog(page: ft.Page, title: str, label: str, value: str, on_ok, helpe
                  allow_zero: bool = False, extra: list[ft.Control] | None = None) -> None:
     """Диалог ввода количества граммов с проверкой."""
     field = ft.TextField(label=label, value=value, suffix_text="г", autofocus=True, helper_text=helper,
-                         border_radius=theme.FIELD_RADIUS)
+                         border_radius=theme.FIELD_RADIUS, **theme.FIELD_BORDER)
 
     def submit(e: ft.ControlEvent) -> None:
         amount = pricing.parse_weight(field.value)

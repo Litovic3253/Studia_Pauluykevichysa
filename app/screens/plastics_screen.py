@@ -32,6 +32,7 @@ class PlasticsScreen(ft.Column):
         self.search_field = ft.TextField(
             hint_text="Поиск: название, применение…", prefix_icon=ft.Icons.SEARCH, dense=True,
             border_radius=theme.FIELD_RADIUS, on_change=self._on_search, col={"xs": 12, "md": 5},
+            **theme.FIELD_BORDER,
         )
         self.cards = theme.grid([])
 

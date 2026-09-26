@@ -26,6 +26,9 @@ BUTTON_RADIUS = 10
 SPACING = 12
 PAGE_PADDING = 24
 FIELD_RADIUS = 10
+# Рамка полей ввода: без неё Flutter рисует рамку чёрной (не в цвет темы).
+FIELD_BORDER = dict(border_color=ft.Colors.OUTLINE, focused_border_color=ft.Colors.ON_SURFACE,
+                    focused_border_width=1.5)
 
 # Ширина контента на больших мониторах — дальше строки становятся нечитаемо длинными.
 MAX_CONTENT_WIDTH = 1180
@@ -348,8 +351,7 @@ def in_col(control: ft.Control, col) -> ft.Row:
 def field(label: str, col=None, **kwargs) -> ft.TextField:
     """Текстовое поле в едином стиле."""
     defaults = dict(label=label, border_radius=FIELD_RADIUS, col=col or {"xs": 12, "md": 6}, text_size=14,
-                    border_color=ft.Colors.OUTLINE, focused_border_color=ft.Colors.ON_SURFACE, focused_border_width=1.5,
-                    label_style=ft.TextStyle(size=13, color=ft.Colors.ON_SURFACE_VARIANT))
+                    **FIELD_BORDER, label_style=ft.TextStyle(size=13, color=ft.Colors.ON_SURFACE_VARIANT))
     defaults.update(kwargs)
     return ft.TextField(**defaults)
 

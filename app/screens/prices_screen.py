@@ -93,7 +93,7 @@ class PricesScreen(ft.Column):
         def number_field(value, col, hint: str = "") -> ft.TextField:
             return ft.TextField(value=pricing.fmt_number(value) if value else "", dense=True, suffix_text="₽/кг",
                                 hint_text=hint, border_radius=theme.FIELD_RADIUS, text_align=ft.TextAlign.RIGHT,
-                                col=col)
+                                col=col, **theme.FIELD_BORDER)
 
         purchase_field = number_field(purchase, PURCHASE_COL, "не указана")
         price_field = number_field(price, PRICE_COL)
