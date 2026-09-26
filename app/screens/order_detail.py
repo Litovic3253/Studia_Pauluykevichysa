@@ -9,7 +9,7 @@ import flet as ft
 import db
 import pricing
 from paths import DATA_DIR
-from app import input_hints, plastics, price_view, theme
+from app import client_pdf, input_hints, plastics, price_view, theme
 from app.dialogs import grams_dialog
 
 LOCAL_STORAGE = DATA_DIR / "files_storage"
@@ -126,9 +126,12 @@ class OrderDetailScreen(ft.Column):
         self.header.content = theme.page_header(
             f"Заказ #{self.order_id} · {order['client']}",
             f"создан {pricing.fmt_date(order['created_at'][:10])}",
-            [ft.OutlinedButton("Номер и дата", icon=ft.Icons.EDIT_OUTLINED, on_click=self._on_edit_number_date),
-             ft.OutlinedButton("Удалить заказ", icon=ft.Icons.DELETE_OUTLINE, on_click=self._on_delete_click,
-                               style=ft.ButtonStyle(color=theme.ERR))],
+            # Главное действие — с подписью; редкие — иконками с подсказками, чтобы шапка помещалась.
+            [ft.OutlinedButton("PDF для клиента", icon=ft.Icons.PICTURE_AS_PDF_OUTLINED, on_click=self._on_client_pdf),
+             ft.IconButton(ft.Icons.EDIT_OUTLINED, tooltip=theme.tip("Изменить номер и дату создания"),
+                           on_click=self._on_edit_number_date),
+             ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color=theme.ERR, tooltip=theme.tip("Удалить заказ"),
+                           on_click=self._on_delete_click)],
             leading=ft.IconButton(ft.Icons.ARROW_BACK, tooltip=theme.tip("К списку"), on_click=lambda e: self.on_back()),
         )
 
@@ -374,6 +377,16 @@ class OrderDetailScreen(ft.Column):
         )
         pricing.recalc_order_price(self.order_id)
         self.refresh()
+
+    def _on_client_pdf(self, e: ft.ControlEvent | None) -> None:
+        """Пересобирает PDF по текущим данным заказа и открывает его."""
+        try:
+            path = client_pdf.build_order_pdf(self.order_id)
+        except Exception as exc:  # noqa: BLE001 - например, файл открыт в другой программе
+            self.page.open(ft.SnackBar(ft.Text(f"Не удалось сохранить PDF: {exc}"), bgcolor=theme.ERR))
+            return
+        client_pdf.notify_saved(self.page, path, "PDF обновлён")
+        client_pdf.open_file(path)
 
     def _on_edit_number_date(self, e: ft.ControlEvent | None) -> None:
         """Окно «Номер и дата»: номер заказа (переносится со вложениями и списаниями) и дата создания."""

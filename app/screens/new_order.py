@@ -8,7 +8,7 @@ import flet as ft
 import db
 import pricing
 from paths import DATA_DIR
-from app import input_hints, price_view, theme
+from app import client_pdf, input_hints, price_view, theme
 
 LOCAL_STORAGE = DATA_DIR / "files_storage"
 
@@ -174,8 +174,18 @@ class NewOrderScreen(ft.Column):
             shutil.copy(f.path, dest)
             db.add_attachment(order_id, "local", local_path=str(dest), filename=f.name, file_type="document")
 
+        # PDF для клиента — сразу после создания; ошибка PDF не мешает самому заказу.
+        page = self.page
+        try:
+            pdf_path = client_pdf.build_order_pdf(order_id)
+        except Exception as exc:  # noqa: BLE001 - покажем пользователю, заказ уже сохранён
+            pdf_path, pdf_error = None, exc
         self._reset_form()
         self.on_created(order_id)
+        if page and pdf_path:
+            client_pdf.notify_saved(page, pdf_path)
+        elif page:
+            page.open(ft.SnackBar(ft.Text(f"Заказ создан, но PDF не сохранился: {pdf_error}"), bgcolor=theme.ERR))
 
     def _reset_form(self) -> None:
         self.client_field.value = ""

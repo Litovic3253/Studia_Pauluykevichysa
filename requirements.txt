@@ -2,6 +2,7 @@ python-dotenv>=1.0
 flet>=0.24,<0.28
 pytest>=8.0,<9
 openpyxl>=3.1,<4
+fpdf2>=2.7,<3
 google-api-python-client>=2.100,<3
 google-auth>=2.23,<3
 google-auth-httplib2>=0.2,<1

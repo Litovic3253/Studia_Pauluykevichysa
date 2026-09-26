@@ -16,5 +16,7 @@ def temp_db(tmp_path, monkeypatch):
     """Подменяет db.DB_PATH на временный файл и инициализирует схему."""
     db_path = tmp_path / "test_orders.db"
     monkeypatch.setattr(db, "DB_PATH", db_path)
+    from app import client_pdf
+    monkeypatch.setattr(client_pdf, "PDF_DIR", tmp_path / "pdf")  # не сорить PDF-ками в папке проекта
     db.init()
     yield db_path
