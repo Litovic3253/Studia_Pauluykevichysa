@@ -157,17 +157,17 @@ def test_recalc_order_price_uses_orders_defect_percent(temp_db):
     assert order["price"] == 600
 
 
-def test_calc_price_cost_is_purchase_plastic_plus_print_hours(temp_db):
+def test_calc_price_cost_is_purchase_plastic_only(temp_db):
     db.set_setting("materials", {"PLA": 4000})
     db.set_setting("purchase_prices", {"PLA": 1500})
     db.set_setting("hour_rate", 50)
     db.set_setting("reverse_price", 1000)
     # цена: материал 400 + время 100 + брак 10% 50 + реверс 1000 = 1550
-    # себестоимость: 100 г × 1500/кг = 150 + 2 ч × 50 = 100 → 250
+    # себестоимость: только пластик 100 г × 1500/кг = 150 (часы печати — прибыль)
     result = pricing.calc_price("PLA", weight_g=100, hours=2, qty=1, reverse=True, defect_percent=10)
     assert result["purchase_cost"] == 150
-    assert result["cost"] == 250
-    assert result["profit"] == 1550 - 250
+    assert result["cost"] == 150
+    assert result["profit"] == 1550 - 150
 
 
 def test_recalc_costs_updates_existing_orders(temp_db):
@@ -177,7 +177,7 @@ def test_recalc_costs_updates_existing_orders(temp_db):
     db.set_setting("purchase_prices", {"PLA": 1000})
     db.recalc_costs()
     order = db.get_order(order_id)
-    assert order["cost"] == 200 * 2 * 1000 / 1000 + 1 * 2 * 50
+    assert order["cost"] == 200 * 2 * 1000 / 1000
     assert order["price"] == 3000
 
 

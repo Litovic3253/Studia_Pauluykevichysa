@@ -21,13 +21,12 @@ def breakdown_rows(calc: dict, defect_percent: float, total: float | None = None
 
 
 def profit_rows(calc: dict, material: str | None, total: float | None = None) -> list[ft.Control]:
-    """Себестоимость (пластик по закупке + часы печати) и прибыль — всё, что сверх неё.
+    """Себестоимость (пластик по закупке) и прибыль — всё, что сверх неё.
     total — фактическая цена заказа, если задана вручную."""
     price = calc["price"] if total is None else total
     profit = price - calc["cost"]
     rows = [
         theme.kv_row("Пластик по закупке", f"−{pricing.money(calc['purchase_cost'])}"),
-        theme.kv_row("Часы печати", f"−{pricing.money(calc['time_cost'])}"),
         theme.kv_row("Прибыль", pricing.money(profit), bold=True,
                      color=theme.OK if profit >= 0 else theme.ERR),
     ]

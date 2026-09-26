@@ -1,7 +1,7 @@
 """Смета за период (месяц, квартал или свои даты) — Excel-файл с заказами, деньгами и прибылью.
 
 Лист «Смета»: каждый заказ периода (по дате создания, отменённые не входят) — цена, предоплата,
-получено, долг, пластик по закупке, часы печати, себестоимость, прибыль; внизу строка «Итого»
+получено, долг, себестоимость (пластик по закупке), прибыль; внизу строка «Итого»
 формулами Excel. Лист «Итоги»: сводка по деньгам и расход пластика по материалам."""
 import calendar
 from datetime import date
@@ -33,9 +33,7 @@ COLUMNS = [
     ("Оплачен", 9, None, False),
     ("Получено", 12, "#,##0", True),
     ("Долг", 12, "#,##0", True),
-    ("Пластик (закупка)", 13, "#,##0", True),
-    ("Часы печати", 12, "#,##0", True),
-    ("Себестоимость", 14, "#,##0", True),
+    ("Себестоимость (пластик)", 15, "#,##0", True),
     ("Прибыль", 12, "#,##0", True),
 ]
 
@@ -83,7 +81,7 @@ def report_rows(start: date, end: date) -> list[dict]:
             "status": db.STATUSES.get(o["status"], o["status"]).split(" ", 1)[-1],
             "price": price, "prepayment": prepayment, "paid": bool(o["paid"]),
             "received": received, "debt": max(price - received, 0),
-            "plastic_cost": exp["plastic"], "time_cost": exp["time"], "cost": exp["total"],
+            "cost": exp["total"],
             "profit": price - exp["total"],
         })
     return rows
@@ -91,7 +89,7 @@ def report_rows(start: date, end: date) -> list[dict]:
 
 def summary(rows: list[dict]) -> dict:
     total = {k: sum(r[k] for r in rows) for k in
-             ("price", "received", "debt", "plastic_cost", "time_cost", "cost", "profit", "grams", "hours")}
+             ("price", "received", "debt", "cost", "profit", "grams", "hours")}
     total["orders"] = len(rows)
     total["margin"] = total["profit"] / total["price"] if total["price"] else 0
     by_material: dict[str, float] = {}
@@ -142,7 +140,7 @@ def write_report(path: str | Path, start: date, end: date) -> Path:
     ws.row_dimensions[head_row].height = 30
 
     keys = ["id", "date", "client", "description", "material", "grams", "hours", "qty", "status", "price",
-            "prepayment", "paid", "received", "debt", "plastic_cost", "time_cost", "cost", "profit"]
+            "prepayment", "paid", "received", "debt", "cost", "profit"]
     for i, r in enumerate(rows):
         row = head_row + 1 + i
         for col, key in enumerate(keys, start=1):
@@ -183,9 +181,7 @@ def write_report(path: str | Path, start: date, end: date) -> Path:
         ("Сумма заказов", total["price"], "#,##0"),
         ("Получено (оплаты + предоплаты)", total["received"], "#,##0"),
         ("Ждём доплату", total["debt"], "#,##0"),
-        ("Пластик по закупке", total["plastic_cost"], "#,##0"),
-        ("Часы печати", total["time_cost"], "#,##0"),
-        ("Себестоимость", total["cost"], "#,##0"),
+        ("Себестоимость (пластик по закупке)", total["cost"], "#,##0"),
         ("Прибыль", total["profit"], "#,##0"),
         ("Маржа", total["margin"], "0%"),
         ("Пластика израсходовано, кг", total["grams"] / 1000, "0.00"),

@@ -133,7 +133,7 @@ def deadline_mark(order) -> str:
 def calc_price(material: str | None, weight_g: float, hours: float, qty: int, reverse: bool = False,
                defect_percent: float = 0) -> dict:
     """Брак — надбавка в % от стоимости печати (материал + время); на реверс-моделирование не начисляется.
-    cost — себестоимость (пластик по закупке + часы печати), profit — всё, что сверх неё."""
+    cost — себестоимость (пластик по закупке), profit — всё, что сверх неё."""
     s = db.get_settings()
     per_kg = s["materials"].get(material or "", 0)
     material_cost = weight_g * qty * per_kg / 1000

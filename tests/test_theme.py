@@ -20,31 +20,61 @@ def test_card_allows_overriding_defaults():
     assert result.width == 160
 
 
-def test_next_theme_mode_cycles_system_light_dark():
-    assert theme.next_theme_mode("system") == "light"
-    assert theme.next_theme_mode("light") == "dark"
-    assert theme.next_theme_mode("dark") == "system"
+def test_normalize_theme_keeps_known_values_and_falls_back_to_system():
+    assert theme.normalize_theme("system") == "system"
+    assert theme.normalize_theme("dracula") == "dracula"
+    assert theme.normalize_theme("corrupted-value") == "system"
+    assert theme.normalize_theme(None) == "system"
 
 
-def test_next_theme_mode_unknown_value_falls_back_to_system():
-    assert theme.next_theme_mode("bogus") == "system"
+def test_every_palette_has_hex_colors_and_names():
+    for key, p in theme.PALETTES.items():
+        assert p.name
+        for color in (p.bg, p.card, p.fg, p.muted, p.border, p.subtle, p.line, p.accent, *p.syntax):
+            assert color.startswith("#") and len(color) == 7, (key, color)
+    assert {"light", "dark"} <= set(theme.PALETTES)
+    assert any(not p.dark for p in theme.PALETTES.values())
 
 
-def test_flet_theme_modes_cover_every_cycle_value():
-    for mode in theme.THEME_MODE_CYCLE:
-        assert mode in theme.FLET_THEME_MODES
-        assert mode in theme.THEME_ICONS
+class _FakePage:
+    theme = dark_theme = theme_mode = None
 
 
-def test_flet_theme_mode_handles_every_stored_value_safely(temp_db):
-    for mode in theme.THEME_MODE_CYCLE:
-        db.set_setting("theme_mode", mode)
-        stored = db.get_settings()["theme_mode"]
-        assert theme.flet_theme_mode(stored) in theme.FLET_THEME_MODES.values()
+def test_apply_theme_system_uses_light_and_dark():
+    page = _FakePage()
+    theme.apply_theme(page, "system")
+    assert page.theme_mode == ft.ThemeMode.SYSTEM
+    assert page.theme is theme.LIGHT_THEME and page.dark_theme is theme.DARK_THEME
 
 
-def test_flet_theme_mode_falls_back_to_system_for_unknown_value():
-    assert theme.flet_theme_mode("corrupted-value") == theme.FLET_THEME_MODES["system"]
+def test_apply_theme_palette_sets_mode_and_colors():
+    page = _FakePage()
+    theme.apply_theme(page, "dracula")
+    assert page.theme_mode == ft.ThemeMode.DARK
+    assert page.theme.color_scheme.primary == theme.PALETTES["dracula"].accent
+    assert page.theme.scaffold_bgcolor == theme.PALETTES["dracula"].bg
+    theme.apply_theme(page, "github_light")
+    assert page.theme_mode == ft.ThemeMode.LIGHT
+
+
+def test_theme_stored_in_settings_round_trips(temp_db):
+    db.set_setting("theme_mode", "nord")
+    assert theme.normalize_theme(db.get_settings()["theme_mode"]) == "nord"
+    assert theme.theme_name("nord") == "Nord"
+
+
+def test_theme_dialog_renders_all_themes_and_picks(monkeypatch):
+    from app.theme_dialog import ThemeDialog
+    picked = []
+    dialog = ThemeDialog(page=None, on_pick=picked.append)
+    monkeypatch.setattr(dialog.dialog, "update", lambda: None)
+    dialog.current = "system"
+    dialog._render()
+    names = _texts(dialog.body)
+    for key in theme.PALETTES:
+        assert theme.PALETTES[key].name in names
+    dialog._pick("monokai")
+    assert picked == ["monokai"] and dialog.current == "monokai"
 
 
 def test_every_status_has_plain_label_and_color():

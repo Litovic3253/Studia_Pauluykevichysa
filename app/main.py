@@ -18,6 +18,7 @@ from app.excel_writer import export_to_excel
 from app.live_sync import LiveSync
 from app.report_dialog import ReportDialog
 from app.sidebar import Action, Destination, Sidebar
+from app.theme_dialog import ThemeDialog
 from app.screens.customers_screen import CustomersScreen
 from app.screens.new_order import NewOrderScreen
 from app.screens.order_detail import OrderDetailScreen
@@ -73,10 +74,8 @@ def main(page: ft.Page) -> None:
     # Русский язык для стандартных окон Flutter: календарь с понедельника, названия месяцев.
     page.locale_configuration = ft.LocaleConfiguration(
         supported_locales=[ft.Locale("ru", "RU")], current_locale=ft.Locale("ru", "RU"))
-    page.theme = theme.LIGHT_THEME
-    page.dark_theme = theme.DARK_THEME
-    current_theme_mode = db.get_settings().get("theme_mode", "system")
-    page.theme_mode = theme.flet_theme_mode(current_theme_mode)
+    current_theme_mode = theme.normalize_theme(db.get_settings().get("theme_mode"))
+    theme.apply_theme(page, current_theme_mode)
 
     def go_to_new_order() -> None:
         nav_rail.selected_index = 1
@@ -122,12 +121,14 @@ def main(page: ft.Page) -> None:
         switcher.content = section
         page.update()
 
-    def toggle_theme(e: ft.ControlEvent) -> None:
+    def set_theme(value: str) -> None:
         nonlocal current_theme_mode
-        current_theme_mode = theme.next_theme_mode(current_theme_mode)
+        current_theme_mode = theme.normalize_theme(value)
         db.set_setting("theme_mode", current_theme_mode)
-        page.theme_mode = theme.flet_theme_mode(current_theme_mode)
+        theme.apply_theme(page, current_theme_mode)
         apply_layout()
+
+    theme_dialog = ThemeDialog(page, on_pick=set_theme)
 
     def on_export_file_selected(e: ft.FilePickerResultEvent) -> None:
         if not e.path:
@@ -154,13 +155,11 @@ def main(page: ft.Page) -> None:
     report_dialog = ReportDialog(page, on_saved=lambda path: show_message(f"Смета сохранена: {path}"),
                                  on_error=lambda msg: show_message(f"Не удалось сохранить смету: {msg}", True))
 
-    theme_labels = {"system": "Тема: как в системе", "light": "Тема: светлая", "dark": "Тема: тёмная"}
-
     def sidebar_actions() -> list[Action]:
         """Тема, смета и экспорт внизу меню."""
         return [
-            Action(theme.THEME_ICONS.get(current_theme_mode, theme.THEME_ICONS["system"]),
-                   theme_labels.get(current_theme_mode, theme_labels["system"]), toggle_theme),
+            Action(theme.theme_icon(current_theme_mode), f"Тема: {theme.theme_name(current_theme_mode)}",
+                   lambda e: theme_dialog.open(current_theme_mode)),
             Action(ft.Icons.REQUEST_QUOTE_OUTLINED, "Смета за период", lambda e: report_dialog.open()),
             Action(ft.Icons.FILE_DOWNLOAD_OUTLINED, "Экспорт всех данных", on_export_click),
         ]

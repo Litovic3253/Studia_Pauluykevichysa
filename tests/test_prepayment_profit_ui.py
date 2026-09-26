@@ -32,7 +32,7 @@ def test_new_order_saves_prepayment_and_cost(temp_db, monkeypatch):
     order = db.get_order(created[0])
     assert order["prepayment"] == 200
     assert order["price"] == 500
-    assert order["cost"] == 150 + 100  # закупка 100 г × 1500/кг + 2 ч × 50
+    assert order["cost"] == 150  # только закупка: 100 г × 1500/кг
 
 
 def test_order_detail_prepayment_updates_remaining(temp_db, monkeypatch):

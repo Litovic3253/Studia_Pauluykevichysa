@@ -32,7 +32,7 @@ DEFAULT_SETTINGS = {
     "owners": [],        # telegram id владельцев (если ADMIN_IDS не задан в .env)
     "reminder_hour": 9,  # во сколько присылать сводку по дедлайнам
     "last_reminder": "",
-    "theme_mode": "system",  # "system" | "light" | "dark" — тема приложения
+    "theme_mode": "system",  # "system" или ключ app.theme.PALETTES («dracula», «nord»…) — тема приложения
 }
 
 
@@ -140,6 +140,10 @@ def init() -> None:
             # Себестоимость теперь = закупка пластика + часы печати (раньше — цена материала для клиента).
             _recalc_costs(c)
             c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('costs_v1', 'true')")
+        if not c.execute("SELECT 1 FROM settings WHERE key = 'costs_v2'").fetchone():
+            # Себестоимость теперь = только закупка пластика (часы печати ушли в прибыль).
+            _recalc_costs(c)
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('costs_v2', 'true')")
 
 
 def _migrate_pricing_v2(c) -> None:
@@ -221,12 +225,12 @@ def set_setting(key: str, value) -> None:
 # ---------- себестоимость ----------
 
 def expense(material: str | None, weight_g: float, hours: float, qty: int, settings: dict) -> dict:
-    """Себестоимость: пластик по закупочной цене + часы печати по ставке. Всё остальное в цене —
+    """Себестоимость: только пластик по закупочной цене. Всё остальное в цене — часы печати,
     наценка на материал, брак, реверс-моделирование, ручная цена — это прибыль."""
     purchase = settings.get("purchase_prices", {}).get(material or "", 0) or 0
     plastic = (weight_g or 0) * (qty or 1) * purchase / 1000
     time = (hours or 0) * (qty or 1) * settings["hour_rate"]
-    return {"plastic": plastic, "time": time, "total": plastic + time}
+    return {"plastic": plastic, "time": time, "total": plastic}
 
 
 def _recalc_costs(c) -> None:
@@ -241,7 +245,7 @@ def _recalc_costs(c) -> None:
 
 
 def recalc_costs() -> None:
-    """Пересчитать себестоимость всех заказов — после смены закупочных цен или ставки часа.
+    """Пересчитать себестоимость всех заказов — после смены закупочных цен.
     Цены заказов не меняются."""
     with _conn() as c:
         _recalc_costs(c)

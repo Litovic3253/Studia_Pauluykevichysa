@@ -1,7 +1,7 @@
 """Единый визуальный язык приложения: спокойная нейтральная палитра (zinc) в стиле дашбордов
 shadcn/ui, моноширинный JetBrains Mono, карточки-виджеты с тонкой рамкой, крупные цифры,
 мелкие заголовки капсом; синий — только для объёмов в данных, цвета статусов — для статусов."""
-from typing import Iterable
+from typing import Iterable, NamedTuple
 
 import flet as ft
 
@@ -59,32 +59,78 @@ HOVER_ANIMATION = ft.animation.Animation(220, ft.AnimationCurve.EASE_OUT)
 LIFT_ANIMATION = ft.animation.Animation(280, SPRING)
 
 
-def _scheme(dark: bool) -> ft.ColorScheme:
-    """Нейтральные токены shadcn (zinc): background / card / foreground / muted / border."""
-    if dark:
-        card_bg, fg, muted, border, subtle, line = "#141417", "#FAFAFA", "#A1A1AA", "#27272A", "#1C1C20", "#3F3F46"
-    else:
-        card_bg, fg, muted, border, subtle, line = "#FFFFFF", "#09090B", "#71717A", "#E4E4E7", "#F4F4F5", "#D4D4D8"
-    bg = background(dark)
+class Palette(NamedTuple):
+    """Цветовая тема приложения — как тема редактора в VS Code (vscodethemes.com).
+    syntax — цвета «ключевое слово / строка / функция» для превью в окне выбора темы."""
+    name: str
+    dark: bool
+    bg: str        # фон окна
+    card: str      # фон карточек и меню
+    fg: str        # основной текст
+    muted: str     # приглушённый текст
+    border: str    # тонкие рамки карточек
+    subtle: str    # выбранный пункт меню, подложки
+    line: str      # рамки полей ввода
+    accent: str    # кнопки, логотип
+    syntax: tuple[str, str, str]
+
+
+PALETTES: dict[str, Palette] = {
+    "light": Palette("Светлая", False, "#FAFAFA", "#FFFFFF", "#09090B", "#71717A", "#E4E4E7", "#F4F4F5",
+                     "#D4D4D8", "#09090B", ("#7C3AED", "#059669", "#2563EB")),
+    "dark": Palette("Тёмная", True, "#0A0A0B", "#141417", "#FAFAFA", "#A1A1AA", "#27272A", "#1C1C20",
+                    "#3F3F46", "#FAFAFA", ("#C084FC", "#34D399", "#60A5FA")),
+    "github_light": Palette("GitHub Light", False, "#F6F8FA", "#FFFFFF", "#1F2328", "#656D76", "#D0D7DE",
+                            "#EAEEF2", "#AFB8C1", "#0969DA", ("#CF222E", "#0A3069", "#8250DF")),
+    "catppuccin_latte": Palette("Catppuccin Latte", False, "#E6E9EF", "#EFF1F5", "#4C4F69", "#6C6F85",
+                                "#CCD0DA", "#DCE0E8", "#BCC0CC", "#8839EF", ("#8839EF", "#40A02B", "#1E66F5")),
+    "solarized_light": Palette("Solarized Light", False, "#EEE8D5", "#FDF6E3", "#073642", "#657B83",
+                               "#DDD6C1", "#EEE8D5", "#C9C2AE", "#268BD2", ("#859900", "#2AA198", "#268BD2")),
+    "github_dark": Palette("GitHub Dark", True, "#010409", "#0D1117", "#E6EDF3", "#8D96A0", "#30363D",
+                           "#161B22", "#484F58", "#2F81F7", ("#FF7B72", "#A5D6FF", "#D2A8FF")),
+    "one_dark": Palette("One Dark Pro", True, "#21252B", "#282C34", "#ABB2BF", "#7F848E", "#3E4452",
+                        "#2C313A", "#4B5263", "#61AFEF", ("#C678DD", "#98C379", "#61AFEF")),
+    "dracula": Palette("Dracula", True, "#21222C", "#282A36", "#F8F8F2", "#A0A8CD", "#343746", "#44475A",
+                       "#6272A4", "#BD93F9", ("#FF79C6", "#F1FA8C", "#50FA7B")),
+    "monokai": Palette("Monokai", True, "#1E1F1C", "#272822", "#F8F8F2", "#A09F93", "#3E3D32", "#3E3D32",
+                       "#575852", "#A6E22E", ("#F92672", "#E6DB74", "#A6E22E")),
+    "tokyo_night": Palette("Tokyo Night", True, "#16161E", "#1A1B26", "#C0CAF5", "#787C99", "#292E42",
+                           "#24283B", "#3B4261", "#7AA2F7", ("#BB9AF7", "#9ECE6A", "#7AA2F7")),
+    "catppuccin_mocha": Palette("Catppuccin Mocha", True, "#11111B", "#1E1E2E", "#CDD6F4", "#A6ADC8",
+                                "#313244", "#313244", "#45475A", "#CBA6F7", ("#CBA6F7", "#A6E3A1", "#89B4FA")),
+    "nord": Palette("Nord", True, "#2E3440", "#3B4252", "#ECEFF4", "#A5AFC2", "#434C5E", "#434C5E",
+                    "#4C566A", "#88C0D0", ("#81A1C1", "#A3BE8C", "#88C0D0")),
+    "gruvbox_dark": Palette("Gruvbox Dark", True, "#1D2021", "#282828", "#EBDBB2", "#A89984", "#3C3836",
+                            "#32302F", "#504945", "#FABD2F", ("#FB4934", "#B8BB26", "#8EC07C")),
+    "night_owl": Palette("Night Owl", True, "#010E1A", "#011627", "#D6DEEB", "#8BA3B8", "#122D42", "#0B2942",
+                         "#1D3B53", "#82AAFF", ("#C792EA", "#ECC48D", "#82AAFF")),
+    "solarized_dark": Palette("Solarized Dark", True, "#00212B", "#002B36", "#EEE8D5", "#93A1A1", "#0F3B47",
+                              "#073642", "#2A5561", "#268BD2", ("#859900", "#2AA198", "#268BD2")),
+}
+
+# «Как в системе» — светлая или тёмная по настройке Windows; остальное — ключи PALETTES.
+SYSTEM_THEME = "system"
+SYSTEM_THEME_NAME = "Как в системе"
+
+
+def _scheme(p: Palette) -> ft.ColorScheme:
+    """Токены в духе shadcn: background / card / foreground / muted / border + акцент темы."""
+    on_accent = p.bg if p.dark else "#FFFFFF"
     return ft.ColorScheme(
-        primary=fg, on_primary=bg,
-        primary_container=subtle, on_primary_container=fg,
-        secondary=muted, on_secondary=bg,
-        secondary_container=subtle, on_secondary_container=fg,
+        primary=p.accent, on_primary=on_accent,
+        primary_container=p.subtle, on_primary_container=p.fg,
+        secondary=p.muted, on_secondary=p.bg,
+        secondary_container=p.subtle, on_secondary_container=p.fg,
         tertiary=DATA, on_tertiary="#FFFFFF",
         error=ERR, on_error="#FFFFFF",
-        surface=card_bg, on_surface=fg,
-        on_surface_variant=muted,
-        surface_variant=subtle, surface_container_high=subtle, surface_container=subtle,
-        surface_container_low=bg, surface_container_lowest=card_bg,
-        outline=line, outline_variant=border,
+        surface=p.card, on_surface=p.fg,
+        on_surface_variant=p.muted,
+        surface_variant=p.subtle, surface_container_high=p.subtle, surface_container=p.subtle,
+        surface_container_low=p.bg, surface_container_lowest=p.card,
+        outline=p.line, outline_variant=p.border,
         surface_tint=ft.Colors.TRANSPARENT,
-        inverse_surface=fg, on_inverse_surface=bg,
+        inverse_surface=p.fg, on_inverse_surface=p.bg,
     )
-
-
-def background(dark: bool) -> str:
-    return "#0A0A0B" if dark else "#FAFAFA"
 
 
 def _button_shape() -> ft.RoundedRectangleBorder:
@@ -92,7 +138,7 @@ def _button_shape() -> ft.RoundedRectangleBorder:
 
 
 def _rounded_button_themes() -> dict:
-    """Общие скруглённые темы кнопок — применяются и к светлой, и к тёмной теме,
+    """Общие скруглённые темы кнопок — применяются ко всем темам,
     чтобы BUTTON_RADIUS действовал на все кнопки без изменений в экранах."""
     return dict(
         elevated_button_theme=ft.ElevatedButtonTheme(shape=_button_shape()),
@@ -103,45 +149,47 @@ def _rounded_button_themes() -> dict:
     )
 
 
-def _theme(dark: bool) -> ft.Theme:
+def build_theme(p: Palette) -> ft.Theme:
     return ft.Theme(
-        color_scheme=_scheme(dark), use_material3=True, font_family=FONT_FAMILY,
-        scaffold_bgcolor=background(dark),
+        color_scheme=_scheme(p), use_material3=True, font_family=FONT_FAMILY,
+        scaffold_bgcolor=p.bg,
         tooltip_theme=ft.TooltipTheme(text_style=ft.TextStyle(size=12, font_family=FONT_FAMILY)),
         **_rounded_button_themes(),
     )
 
 
-LIGHT_THEME = _theme(dark=False)
-DARK_THEME = _theme(dark=True)
-
-THEME_MODE_CYCLE = ["system", "light", "dark"]
-
-FLET_THEME_MODES = {
-    "system": ft.ThemeMode.SYSTEM,
-    "light": ft.ThemeMode.LIGHT,
-    "dark": ft.ThemeMode.DARK,
-}
-
-THEME_ICONS = {
-    "system": ft.Icons.BRIGHTNESS_AUTO,
-    "light": ft.Icons.LIGHT_MODE,
-    "dark": ft.Icons.DARK_MODE,
-}
+LIGHT_THEME = build_theme(PALETTES["light"])
+DARK_THEME = build_theme(PALETTES["dark"])
 
 
-def next_theme_mode(current: str) -> str:
-    """Следующее значение в цикле система → светлая → тёмная → снова система."""
-    try:
-        idx = THEME_MODE_CYCLE.index(current)
-    except ValueError:
-        idx = -1
-    return THEME_MODE_CYCLE[(idx + 1) % len(THEME_MODE_CYCLE)]
+def normalize_theme(value: str | None) -> str:
+    """Сохранённое значение темы → «system» или ключ PALETTES (неизвестное считается «system»)."""
+    return value if value in PALETTES else SYSTEM_THEME
 
 
-def flet_theme_mode(value: str) -> ft.ThemeMode:
-    """Безопасное преобразование строки в ft.ThemeMode — неизвестное значение считается «system»."""
-    return FLET_THEME_MODES.get(value, ft.ThemeMode.SYSTEM)
+def theme_name(value: str | None) -> str:
+    key = normalize_theme(value)
+    return SYSTEM_THEME_NAME if key == SYSTEM_THEME else PALETTES[key].name
+
+
+def theme_icon(value: str | None):
+    key = normalize_theme(value)
+    if key == SYSTEM_THEME:
+        return ft.Icons.BRIGHTNESS_AUTO
+    if key in ("light", "dark"):
+        return ft.Icons.LIGHT_MODE if key == "light" else ft.Icons.DARK_MODE
+    return ft.Icons.PALETTE_OUTLINED
+
+
+def apply_theme(page: ft.Page, value: str | None) -> None:
+    """Ставит тему странице: «system» — светлая/тёмная по системе, иначе — выбранная палитра."""
+    key = normalize_theme(value)
+    if key == SYSTEM_THEME:
+        page.theme, page.dark_theme, page.theme_mode = LIGHT_THEME, DARK_THEME, ft.ThemeMode.SYSTEM
+        return
+    p = PALETTES[key]
+    page.theme = page.dark_theme = build_theme(p)
+    page.theme_mode = ft.ThemeMode.DARK if p.dark else ft.ThemeMode.LIGHT
 
 
 def add_hover(container: ft.Container, lift: bool = False) -> ft.Container:

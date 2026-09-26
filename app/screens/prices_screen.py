@@ -52,12 +52,12 @@ class PricesScreen(ft.Column):
         settings = theme.section("Расчёт цены", [
             theme.grid([self.hour_rate_field, self.reverse_price_field, self.defect_field, self.currency_field]),
             ft.Text("Изменения сохраняются, когда вы уходите из поля. Цены уже созданных заказов не меняются, "
-                    "а их себестоимость и прибыль пересчитываются по новой закупке и ставке часа.",
+                    "а их себестоимость и прибыль пересчитываются по новой закупке.",
                     size=12, color=ft.Colors.ON_SURFACE_VARIANT),
             ft.Divider(height=8),
             ft.Text("Как считается прибыль", size=13, weight=ft.FontWeight.W_600),
-            ft.Text("Прибыль = цена заказа − пластик по закупке − часы печати по ставке. "
-                    "Наценка на пластик, брак, реверс-моделирование и ручная цена — всё это прибыль.",
+            ft.Text("Прибыль = цена заказа − пластик по закупке. "
+                    "Часы печати, наценка на пластик, брак, реверс-моделирование и ручная цена — всё это прибыль.",
                     size=12, color=ft.Colors.ON_SURFACE_VARIANT),
         ], icon=ft.Icons.TUNE, col={"xs": 12, "lg": 5})
 
@@ -172,13 +172,10 @@ class PricesScreen(ft.Column):
         self.refresh()
 
     def _save_scalars(self, e: ft.ControlEvent) -> None:
-        settings = db.get_settings()
         hour_rate = pricing.parse_number(self.hour_rate_field.value)
         reverse_price = pricing.parse_number(self.reverse_price_field.value)
         if hour_rate is not None:
             db.set_setting("hour_rate", hour_rate)
-            if hour_rate != settings["hour_rate"]:
-                db.recalc_costs()
         if reverse_price is not None:
             db.set_setting("reverse_price", reverse_price)
         defect = pricing.parse_number(self.defect_field.value)

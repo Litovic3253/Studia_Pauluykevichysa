@@ -73,8 +73,8 @@ def test_report_includes_only_period_orders_and_computes_profit(temp_db, tmp_pat
     assert total["price"] == 2000
     assert total["received"] == 1000 + 300
     assert total["debt"] == 700
-    assert total["cost"] == 2 * (150 + 100)
-    assert total["profit"] == 2000 - 500
+    assert total["cost"] == 2 * 150
+    assert total["profit"] == 2000 - 300
 
     path = report.write_report(tmp_path / "смета", start, end)
     assert path.suffix == ".xlsx"
