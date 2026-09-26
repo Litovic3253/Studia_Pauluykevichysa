@@ -1,4 +1,4 @@
-"""Точка входа Mochi Desktop — локальной панели управления заказами 3D-печати."""
+"""Точка входа «Студии Паулюкевичуса» — локальной панели управления заказами 3D-печати."""
 import sys
 from pathlib import Path
 
@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 # Шрифты и иконка: из исходников — <проект>/assets, в собранном .exe — распакованная папка PyInstaller.
+APP_NAME = "Студия Паулюкевичуса"
 ASSETS_DIR = Path(getattr(sys, "_MEIPASS", ROOT)) / "assets"
 
 import flet as ft
@@ -58,7 +59,7 @@ class OrdersSection(ft.Column):
 
 
 def main(page: ft.Page) -> None:
-    page.title = "Mochi Desktop"
+    page.title = APP_NAME
     page.window.width = 1280
     page.window.height = 820
     page.window.min_width = 520
@@ -172,8 +173,9 @@ def main(page: ft.Page) -> None:
         if not extended:
             return ft.Container(logo, padding=ft.padding.only(top=12, bottom=12))
         return ft.Container(
-            ft.Row([logo, ft.Column([ft.Text("Mochi", size=17, font_family=theme.FONT_FAMILY_MEDIUM),
-                                     ft.Text("заказы 3D-печати", size=11, color=ft.Colors.ON_SURFACE_VARIANT)],
+            ft.Row([logo, ft.Column([ft.Text("Студия", size=16, font_family=theme.FONT_FAMILY_MEDIUM),
+                                     ft.Text("Паулюкевичуса", size=12, font_family=theme.FONT_FAMILY_MEDIUM),
+                                     ft.Text("заказы 3D-печати", size=10, color=ft.Colors.ON_SURFACE_VARIANT)],
                                     spacing=0, tight=True)], spacing=10),
             padding=ft.padding.only(left=12, top=12, bottom=12),
         )

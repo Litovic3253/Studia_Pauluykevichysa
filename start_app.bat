@@ -2,10 +2,10 @@
 setlocal enabledelayedexpansion
 chcp 65001 >nul
 cd /d "%~dp0"
-title Mochi Desktop
+title Студия Паулюкевичуса
 
 echo ============================================
-echo    Запуск Mochi Desktop
+echo    Запуск «Студии Паулюкевичуса»
 echo ============================================
 echo.
 
@@ -36,7 +36,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo Запускаю Mochi Desktop...
+echo Запускаю «Студию Паулюкевичуса»...
 ".venv\Scripts\python.exe" app\main.py
 
 echo.
