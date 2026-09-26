@@ -69,3 +69,50 @@ def check_hours(field: ft.TextField) -> float | None:
     field.error_text = None
     field.helper_text = f"= {pricing.fmt_number(value)} ч"
     return value
+
+
+def date_field(label: str, on_pick: Callable[[], None] | None = None, col=None, **kwargs) -> ft.TextField:
+    """Поле даты: точки ставятся сами по мере набора («27092026» → «27.09.2026»),
+    справа — календарь; выбранная дата сразу вписывается в поле, затем вызывается on_pick."""
+    from datetime import date, datetime
+
+    from app import theme
+
+    user_on_change = kwargs.pop("on_change", None)
+    field = theme.field(label, col, **kwargs)
+
+    def on_change(e: ft.ControlEvent) -> None:
+        formatted = pricing.format_date_input(field.value)
+        if formatted != field.value:
+            field.value = formatted
+            if field.page:
+                field.update()
+        if user_on_change:
+            user_on_change(e)
+
+    def picked(e: ft.ControlEvent) -> None:
+        if picker.value:
+            field.value = picker.value.strftime("%d.%m.%Y")
+            field.error_text = None
+            if on_pick:
+                on_pick()
+            if field.page:
+                field.update()
+
+    picker = ft.DatePicker(
+        first_date=datetime(2020, 1, 1), last_date=datetime(2040, 12, 31),
+        date_picker_entry_mode=ft.DatePickerEntryMode.CALENDAR_ONLY,
+        help_text="Выберите дату", cancel_text="Отмена", confirm_text="Готово",
+        on_change=picked,
+    )
+
+    def open_calendar(e: ft.ControlEvent) -> None:
+        iso = pricing.parse_date(field.value)
+        picker.value = datetime.fromisoformat(iso) if iso else datetime.combine(date.today(), datetime.min.time())
+        field.page.open(picker)
+
+    field.on_change = on_change
+    field.suffix = ft.IconButton(ft.Icons.CALENDAR_MONTH_OUTLINED, icon_size=18, tooltip="Выбрать в календаре",
+                                 on_click=open_calendar)
+    field.data = picker  # для тестов и повторного открытия
+    return field

@@ -675,3 +675,13 @@ def money_per_month(months: int) -> list[tuple[str, float]]:
         ).fetchall()
     got = {r["ym"]: r["money"] or 0 for r in rows}
     return [(k, got.get(k, 0)) for k in keys]
+
+
+def orders_between(start_iso: str, end_iso: str):
+    """Заказы, созданные с start по end включительно (ISO-даты), без отменённых — для сметы."""
+    with _conn() as c:
+        return c.execute(
+            "SELECT * FROM orders WHERE status != 'cancelled' "
+            "AND substr(created_at, 1, 10) BETWEEN ? AND ? ORDER BY created_at, id",
+            (start_iso, end_iso),
+        ).fetchall()

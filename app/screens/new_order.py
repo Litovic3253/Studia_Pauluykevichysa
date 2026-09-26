@@ -38,7 +38,8 @@ class NewOrderScreen(ft.Column):
             "Брак, %", third, value=pricing.fmt_number(db.get_settings()["defect_percent"]),
             helper_text="от цены печати", on_change=self._recalc,
         )
-        self.deadline_field = theme.field("Срок", third, hint_text="дд.мм.гггг", helper_text="или «завтра»")
+        self.deadline_field = input_hints.date_field("Срок", col=third, hint_text="дд.мм.гггг",
+                                                     helper_text="или «завтра»")
         self.reverse_checkbox = ft.Checkbox(label="Реверс-моделирование (у клиента нет 3D-модели)",
                                             on_change=self._recalc)
         self.breakdown_column = ft.Column(spacing=6)
@@ -62,7 +63,8 @@ class NewOrderScreen(ft.Column):
             theme.section("Файлы", [
                 ft.Row([ft.OutlinedButton("Прикрепить файлы", icon=ft.Icons.ATTACH_FILE,
                                           on_click=lambda e: self.file_picker.pick_files(allow_multiple=True)),
-                        ft.Container(self.files_text, expand=True)], wrap=True),
+                        ft.Container(self.files_text, expand=True)],
+                       vertical_alignment=ft.CrossAxisAlignment.CENTER),
             ], icon=ft.Icons.FOLDER_OPEN),
         ], spacing=theme.SPACING, col={"xs": 12, "lg": 8})
 

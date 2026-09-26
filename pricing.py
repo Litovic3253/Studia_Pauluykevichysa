@@ -94,6 +94,25 @@ def parse_date(text: str | None) -> str | None:
     return d.isoformat()
 
 
+_DATE_TYPING_RE = re.compile(r"\d{1,12}|\d{2}\.\d{0,2}|\d{2}\.\d{2}\.\d{0,4}")
+
+
+def format_date_input(text: str | None) -> str:
+    """Точки по мере набора: «27092026» → «27.09.2026», «2709» → «27.09».
+    Слова («завтра») и свой формат («1.1.26») не трогает — их разберёт parse_date()."""
+    t = (text or "").strip()
+    if not _DATE_TYPING_RE.fullmatch(t):
+        return text or ""
+    digits = t.replace(".", "")[:8]
+    parts = [digits[:2], digits[2:4], digits[4:8]]
+    result = parts[0]
+    if len(digits) > 2 or t.endswith(".") and len(digits) == 2:
+        result += "." + parts[1]
+    if len(digits) > 4 or t.count(".") == 2 and len(digits) == 4:
+        result += "." + parts[2]
+    return result
+
+
 def fmt_date(iso: str | None) -> str:
     return datetime.fromisoformat(iso).strftime("%d.%m.%Y") if iso else "—"
 

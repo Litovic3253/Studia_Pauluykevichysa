@@ -16,6 +16,8 @@ import db
 from app import sheets_sync, theme
 from app.excel_writer import export_to_excel
 from app.live_sync import LiveSync
+from app.report_dialog import ReportDialog
+from app.sidebar import Action, Destination, Sidebar
 from app.screens.customers_screen import CustomersScreen
 from app.screens.new_order import NewOrderScreen
 from app.screens.order_detail import OrderDetailScreen
@@ -68,6 +70,9 @@ def main(page: ft.Page) -> None:
     db.init()
 
     page.fonts = theme.FONTS
+    # Русский язык для стандартных окон Flutter: календарь с понедельника, названия месяцев.
+    page.locale_configuration = ft.LocaleConfiguration(
+        supported_locales=[ft.Locale("ru", "RU")], current_locale=ft.Locale("ru", "RU"))
     page.theme = theme.LIGHT_THEME
     page.dark_theme = theme.DARK_THEME
     current_theme_mode = db.get_settings().get("theme_mode", "system")
@@ -139,87 +144,57 @@ def main(page: ft.Page) -> None:
     def on_export_click(e: ft.ControlEvent) -> None:
         export_file_picker.save_file(
             dialog_title="Сохранить экспорт как",
-            file_name="mochi_export.xlsx",
+            file_name="Студия_все_данные.xlsx",
             allowed_extensions=["xlsx"],
         )
 
+    def show_message(text: str, error: bool = False) -> None:
+        page.open(ft.SnackBar(ft.Text(text), bgcolor=theme.ERR if error else None))
+
+    report_dialog = ReportDialog(page, on_saved=lambda path: show_message(f"Смета сохранена: {path}"),
+                                 on_error=lambda msg: show_message(f"Не удалось сохранить смету: {msg}", True))
+
     theme_labels = {"system": "Тема: как в системе", "light": "Тема: светлая", "dark": "Тема: тёмная"}
 
-    def rail_trailing(extended: bool) -> ft.Control:
-        """Тема и экспорт внизу меню: с подписями на широком окне, иконками с подсказками — на узком."""
-        theme_icon = theme.THEME_ICONS.get(current_theme_mode, theme.THEME_ICONS["system"])
-        theme_label = theme_labels.get(current_theme_mode, theme_labels["system"])
-        if extended:
-            buttons = [
-                ft.TextButton(theme_label, icon=theme_icon, on_click=toggle_theme),
-                ft.TextButton("Экспорт в Excel", icon=ft.Icons.FILE_DOWNLOAD_OUTLINED, on_click=on_export_click),
-            ]
-            align = ft.CrossAxisAlignment.START
-        else:
-            buttons = [
-                ft.IconButton(theme_icon, tooltip=theme_label, on_click=toggle_theme),
-                ft.IconButton(ft.Icons.FILE_DOWNLOAD_OUTLINED, tooltip="Экспорт в Excel", on_click=on_export_click),
-            ]
-            align = ft.CrossAxisAlignment.CENTER
-        return ft.Container(
-            ft.Column([ft.Divider(), *buttons], spacing=2, horizontal_alignment=align),
-            padding=ft.padding.only(top=8, left=8 if extended else 0, right=8 if extended else 0),
-            width=214 if extended else 72,
-        )
+    def sidebar_actions() -> list[Action]:
+        """Тема, смета и экспорт внизу меню."""
+        return [
+            Action(theme.THEME_ICONS.get(current_theme_mode, theme.THEME_ICONS["system"]),
+                   theme_labels.get(current_theme_mode, theme_labels["system"]), toggle_theme),
+            Action(ft.Icons.REQUEST_QUOTE_OUTLINED, "Смета за период", lambda e: report_dialog.open()),
+            Action(ft.Icons.FILE_DOWNLOAD_OUTLINED, "Экспорт всех данных", on_export_click),
+        ]
 
-    def rail_leading(extended: bool) -> ft.Control:
+    def sidebar_leading(extended: bool) -> ft.Control:
         logo = ft.Container(ft.Icon(ft.Icons.VIEW_IN_AR, color=ft.Colors.ON_PRIMARY, size=20),
-                            bgcolor=ft.Colors.PRIMARY, border_radius=12, padding=9)
+                            bgcolor=ft.Colors.PRIMARY, border_radius=12, padding=9, width=40, height=40)
         if not extended:
-            return ft.Container(logo, padding=ft.padding.only(top=12, bottom=12))
+            return ft.Container(logo, alignment=ft.alignment.center, padding=ft.padding.only(bottom=12))
         return ft.Container(
             ft.Row([logo, ft.Column([ft.Text("Студия", size=16, font_family=theme.FONT_FAMILY_MEDIUM),
                                      ft.Text("Паулюкевичуса", size=12, font_family=theme.FONT_FAMILY_MEDIUM),
                                      ft.Text("заказы 3D-печати", size=10, color=ft.Colors.ON_SURFACE_VARIANT)],
-                                    spacing=0, tight=True)], spacing=10),
-            padding=ft.padding.only(left=12, top=12, bottom=12),
+                                    spacing=0, tight=True)], spacing=12),
+            padding=ft.padding.only(left=4, bottom=16),
         )
 
-    nav_rail = ft.NavigationRail(
-        selected_index=0,
-        label_type=ft.NavigationRailLabelType.ALL,
-        min_extended_width=230,
-        group_alignment=-1.0,
-        indicator_color=ft.Colors.SECONDARY_CONTAINER,
-        bgcolor=ft.Colors.SURFACE,
-        destinations=[
-            ft.NavigationRailDestination(icon=ft.Icons.RECEIPT_LONG_OUTLINED, selected_icon=ft.Icons.RECEIPT_LONG,
-                                         label="Заказы"),
-            ft.NavigationRailDestination(icon=ft.Icons.ADD_BOX_OUTLINED, selected_icon=ft.Icons.ADD_BOX,
-                                         label="Новый заказ"),
-            ft.NavigationRailDestination(icon=ft.Icons.PEOPLE_OUTLINE, selected_icon=ft.Icons.PEOPLE,
-                                         label="Клиенты"),
-            ft.NavigationRailDestination(icon=ft.Icons.SCIENCE_OUTLINED, selected_icon=ft.Icons.SCIENCE,
-                                         label="Информация о пластике"),
-            ft.NavigationRailDestination(icon=ft.Icons.CALCULATE_OUTLINED, selected_icon=ft.Icons.CALCULATE,
-                                         label="Калькулятор пластика"),
-            ft.NavigationRailDestination(icon=ft.Icons.SELL_OUTLINED, selected_icon=ft.Icons.SELL, label="Цены"),
-            ft.NavigationRailDestination(icon=ft.Icons.INSIGHTS_OUTLINED, selected_icon=ft.Icons.INSIGHTS,
-                                         label="Статистика"),
-        ],
-        on_change=on_nav_change,
-    )
+    nav_rail = Sidebar([
+        Destination(ft.Icons.RECEIPT_LONG_OUTLINED, ft.Icons.RECEIPT_LONG, "Заказы"),
+        Destination(ft.Icons.ADD_BOX_OUTLINED, ft.Icons.ADD_BOX, "Новый заказ"),
+        Destination(ft.Icons.PEOPLE_OUTLINE, ft.Icons.PEOPLE, "Клиенты"),
+        Destination(ft.Icons.SCIENCE_OUTLINED, ft.Icons.SCIENCE, "Информация о пластике"),
+        Destination(ft.Icons.CALCULATE_OUTLINED, ft.Icons.CALCULATE, "Калькулятор пластика"),
+        Destination(ft.Icons.SELL_OUTLINED, ft.Icons.SELL, "Цены"),
+        Destination(ft.Icons.INSIGHTS_OUTLINED, ft.Icons.INSIGHTS, "Статистика"),
+    ], on_change=on_nav_change)
 
     def apply_layout(e=None) -> None:
         """Подстраивает меню, отступы и «Клиентов» под текущую ширину окна."""
         width = page.width or page.window.width or 1280
         extended = width >= theme.WIDE_WIDTH
         compact = width < theme.COMPACT_WIDTH
-        nav_rail.extended = extended
-        if extended:
-            nav_rail.label_type = ft.NavigationRailLabelType.NONE
-        elif compact:
-            nav_rail.label_type = ft.NavigationRailLabelType.SELECTED
-        else:
-            nav_rail.label_type = ft.NavigationRailLabelType.ALL
-        nav_rail.leading = rail_leading(extended)
-        nav_rail.trailing = rail_trailing(extended)
-        rail_width = 230 if extended else 80
+        nav_rail.set_layout(extended, sidebar_leading(extended), sidebar_actions())
+        rail_width = nav_rail.width
         side = 12 if compact else theme.content_padding(width - rail_width)
         content.padding = ft.padding.symmetric(horizontal=side, vertical=12 if compact else 20)
         customers_screen.set_compact(compact)
@@ -241,7 +216,9 @@ def main(page: ft.Page) -> None:
     sheets_sync.sync_in_background()  # таблица актуальна сразу после запуска, а не только после первой правки
     page.on_disconnect = lambda e: live_sync.stop()
 
-    page.add(ft.Row([nav_rail, ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT), content], expand=True, spacing=0))
+    # STRETCH — меню во всю высоту окна (иначе Row центрирует его по вертикали).
+    page.add(ft.Row([nav_rail, ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT), content],
+                    expand=True, spacing=0, vertical_alignment=ft.CrossAxisAlignment.STRETCH))
     apply_layout()
 
 

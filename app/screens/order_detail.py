@@ -61,8 +61,9 @@ class OrderDetailScreen(ft.Column):
         self.qty_field = theme.field("Кол-во, шт", third, on_blur=self._on_price_fields_blur)
         self.defect_field = theme.field("Брак, %", third, helper_text="от цены печати",
                                         on_blur=self._on_price_fields_blur)
-        self.deadline_field = theme.field("Срок", third, hint_text="дд.мм.гггг", helper_text="или «завтра»",
-                                          on_blur=self._on_deadline_blur)
+        self.deadline_field = input_hints.date_field("Срок", col=third, hint_text="дд.мм.гггг",
+                                                     helper_text="или «завтра»", on_blur=self._on_deadline_blur,
+                                                     on_pick=lambda: self._on_deadline_blur(None))
         self.notes_field = theme.field("Заметки", {"xs": 12}, multiline=True, min_lines=2,
                                        on_blur=self._on_other_field_blur)
         self.price_field = theme.field("Итоговая цена", {"xs": 12}, helper_text="Можно задать вручную",
@@ -71,7 +72,7 @@ class OrderDetailScreen(ft.Column):
         self.profit_column = ft.Column(spacing=6)
         self.manual_price_note = ft.Text("", size=12, color=theme.WARN, visible=False)
         self.attachments_column = ft.Column(spacing=4)
-        self.usage_row = ft.Row(spacing=8, wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        self.usage_row = ft.Row(spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
         self.file_picker = ft.FilePicker(on_result=self._on_file_picked)
         self.status_banner = ft.Text("", color=theme.ERR, visible=False)
