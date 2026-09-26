@@ -31,7 +31,7 @@ class SpoolsScreen(ft.Column):
         self.color_field = theme.field("Цвет", {"xs": 12, "sm": 6}, hint_text="белый, чёрный…")
         self.weight_field = theme.field("Вес пластика", {"xs": 12, "sm": 6}, value="1000", suffix_text="г",
                                         helper_text="Без веса пустой катушки")
-        self.add_error = ft.Text("", color=ft.Colors.RED, visible=False)
+        self.add_error = ft.Text("", color=theme.ERR, visible=False)
 
         spools = theme.section("Катушки", [self.archive_switch, self.spools_column],
                                icon=ft.Icons.ALBUM_OUTLINED)
@@ -72,11 +72,11 @@ class SpoolsScreen(ft.Column):
             f"В наличии {len(stock)} видов пластика · осталось {grams(totals['remaining_g'])}",
         )
         self.kpi_grid.controls = [
-            self._kpi("Загружено", grams(totals["loaded_g"]), ft.Icons.DOWNLOAD, ft.Colors.BLUE),
-            self._kpi("Осталось", grams(totals["remaining_g"]), ft.Icons.INVENTORY_2_OUTLINED, ft.Colors.GREEN),
+            self._kpi("Загружено", grams(totals["loaded_g"]), ft.Icons.DOWNLOAD, theme.DATA),
+            self._kpi("Осталось", grams(totals["remaining_g"]), ft.Icons.INVENTORY_2_OUTLINED, theme.OK),
             self._kpi("Израсходовано", grams(totals["used_g"]), ft.Icons.LOCAL_FIRE_DEPARTMENT_OUTLINED,
-                      ft.Colors.ORANGE_800),
-            self._kpi("Катушек", str(totals["spools"]), ft.Icons.ALBUM_OUTLINED, ft.Colors.DEEP_PURPLE),
+                      theme.WARN),
+            self._kpi("Катушек", str(totals["spools"]), ft.Icons.ALBUM_OUTLINED, theme.VIOLET),
         ]
 
         spools = db.list_spools(include_archived=self.show_archive)
@@ -118,9 +118,9 @@ class SpoolsScreen(ft.Column):
         if s["archived"]:
             pills.append(theme.pill("в архиве", ft.Colors.OUTLINE))
         elif remaining <= 0:
-            pills.append(theme.pill("пустая", ft.Colors.RED_400, ft.Icons.ERROR_OUTLINE))
+            pills.append(theme.pill("пустая", theme.ERR, ft.Icons.ERROR_OUTLINE))
         elif low:
-            pills.append(theme.pill("заканчивается", ft.Colors.ORANGE_800, ft.Icons.WARNING_AMBER))
+            pills.append(theme.pill("заканчивается", theme.WARN, ft.Icons.WARNING_AMBER))
 
         if s["archived"]:
             actions = [
@@ -136,7 +136,7 @@ class SpoolsScreen(ft.Column):
                 ft.IconButton(ft.Icons.ARCHIVE_OUTLINED, tooltip="В архив (катушка закончилась)",
                               on_click=lambda e, sid=s["id"]: self._archive(sid, True)),
             ]
-        color = ft.Colors.RED_400 if remaining <= 0 else ft.Colors.ORANGE_800 if low else ft.Colors.GREEN
+        color = theme.ERR if remaining <= 0 else theme.WARN if low else theme.OK
         return ft.Container(ft.Column([
             ft.Row([ft.Text(title, weight=ft.FontWeight.W_600, expand=True), *pills]),
             ft.Row([ft.Text(f"осталось {grams(remaining)} из {grams(s['initial_g'])}", size=13, expand=True),
@@ -210,7 +210,7 @@ class SpoolsScreen(ft.Column):
             title=ft.Text(f"Удалить катушку «{title}»?"),
             content=ft.Text("Вместе с ней удалится история её списаний."),
             actions=[ft.TextButton("Отмена", on_click=lambda e: self.page.close(dialog)),
-                     ft.TextButton("Удалить", on_click=confirm, style=ft.ButtonStyle(color=ft.Colors.RED))],
+                     ft.TextButton("Удалить", on_click=confirm, style=ft.ButtonStyle(color=theme.ERR))],
         )
         self.page.open(dialog)
 

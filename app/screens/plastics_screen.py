@@ -121,12 +121,12 @@ class PlasticsScreen(ft.Column):
 
     def _card(self, p: dict, stock_entry: dict | None) -> ft.Control:
         if stock_entry:
-            stock_pill = theme.pill(f"есть {_grams(stock_entry['remaining_g'])}", ft.Colors.GREEN, ft.Icons.CHECK_CIRCLE)
+            stock_pill = theme.pill(f"есть {_grams(stock_entry['remaining_g'])}", theme.OK, ft.Icons.CHECK_CIRCLE)
         else:
             stock_pill = theme.pill("нет в наличии", ft.Colors.OUTLINE, ft.Icons.REMOVE_CIRCLE_OUTLINE)
 
-        drying_color = ft.Colors.ORANGE_800 if p["drying"].lower() in YES_WORDS else ft.Colors.BLUE_GREY
-        nozzle_color = ft.Colors.RED_400 if p["hardened_nozzle"].lower() == "да" else ft.Colors.BLUE_GREY
+        drying_color = theme.WARN if p["drying"].lower() in YES_WORDS else theme.IDLE
+        nozzle_color = theme.ERR if p["hardened_nozzle"].lower() == "да" else theme.IDLE
         badges = ft.Row([
             theme.pill(f"Печать: {p['difficulty'].lower()}", ft.Colors.PRIMARY, ft.Icons.PRECISION_MANUFACTURING),
             theme.pill(f"Сушка: {p['drying'].lower()}", drying_color, ft.Icons.AIR),
@@ -137,8 +137,8 @@ class PlasticsScreen(ft.Column):
         bars = [self._rating(label, p[key]) for key, label in plastics.RATED_FIELDS]
         expanded = p["name"] in self.expanded
         details = [
-            self._detail("Плюсы", p["pros"], ft.Icons.ADD_CIRCLE_OUTLINE, ft.Colors.GREEN),
-            self._detail("Минусы", p["cons"], ft.Icons.REMOVE_CIRCLE_OUTLINE, ft.Colors.RED_400),
+            self._detail("Плюсы", p["pros"], ft.Icons.ADD_CIRCLE_OUTLINE, theme.OK),
+            self._detail("Минусы", p["cons"], ft.Icons.REMOVE_CIRCLE_OUTLINE, theme.ERR),
             self._detail("Лучшее применение", p["best_use"], ft.Icons.STAR_OUTLINE, ft.Colors.PRIMARY),
             self._detail("Когда выбирать", p["when"], ft.Icons.CHECK, ft.Colors.PRIMARY),
             self._detail("Сильная / слабая сторона", f"{p['strong']} / {p['weak']}", ft.Icons.BALANCE,

@@ -43,7 +43,10 @@ class OrderDetailScreen(ft.Column):
             options=[ft.dropdown.Option(code, theme.status_style(code)[0]) for code in db.STATUSES],
             on_change=self._on_status_change,
         )
-        self.paid_switch = ft.Switch(label="Оплачен", on_change=self._on_paid_change)
+        self.paid_switch = ft.Switch(label="Оплачен полностью", on_change=self._on_paid_change)
+        self.prepayment_field = theme.field("Предоплата", {"xs": 12, "sm": 6}, suffix_text="₽",
+                                            helper_text="Сколько клиент уже внёс", on_blur=self._on_prepayment_blur)
+        self.payment_summary = ft.Column(spacing=6)
         self.client_field = theme.field("Клиент", half, on_blur=self._on_client_blur)
         self.contact_field = theme.field("Контакт", half, on_blur=self._on_client_blur)
         self.customer_dd = theme.dropdown("Карточка клиента", width=300, on_change=self._on_customer_change)
@@ -65,12 +68,13 @@ class OrderDetailScreen(ft.Column):
         self.price_field = theme.field("Итоговая цена", {"xs": 12}, helper_text="Можно задать вручную",
                                        on_blur=self._on_price_manual_blur)
         self.breakdown_column = ft.Column(spacing=6)
-        self.manual_price_note = ft.Text("", size=12, color=ft.Colors.ORANGE_800, visible=False)
+        self.profit_column = ft.Column(spacing=6)
+        self.manual_price_note = ft.Text("", size=12, color=theme.WARN, visible=False)
         self.attachments_column = ft.Column(spacing=4)
         self.usage_row = ft.Row(spacing=8, wrap=True, vertical_alignment=ft.CrossAxisAlignment.CENTER)
 
         self.file_picker = ft.FilePicker(on_result=self._on_file_picked)
-        self.status_banner = ft.Text("", color=ft.Colors.RED, visible=False)
+        self.status_banner = ft.Text("", color=theme.ERR, visible=False)
         self.header = ft.Container()
 
         left = ft.Column([
@@ -84,10 +88,14 @@ class OrderDetailScreen(ft.Column):
         ], spacing=theme.SPACING, col={"xs": 12, "lg": 7})
 
         right = ft.Column([
-            theme.section("Статус и оплата", [ft.Row([self.status_dd, self.paid_switch], spacing=16, wrap=True)],
-                          icon=ft.Icons.FLAG_OUTLINED),
+            theme.section("Статус и оплата", [
+                ft.Row([self.status_dd, self.paid_switch], spacing=16, wrap=True),
+                theme.grid([self.prepayment_field]),
+                self.payment_summary,
+            ], icon=ft.Icons.FLAG_OUTLINED),
             theme.section("Расчёт цены", [self.breakdown_column, self.manual_price_note,
-                                          theme.grid([self.price_field])],
+                                          theme.grid([self.price_field]),
+                                          price_view.profit_box([self.profit_column])],
                           icon=ft.Icons.CALCULATE_OUTLINED),
             theme.section("Вложения", [
                 self.attachments_column,
@@ -118,7 +126,7 @@ class OrderDetailScreen(ft.Column):
             f"Заказ #{self.order_id} · {order['client']}",
             f"создан {pricing.fmt_date(order['created_at'][:10])}",
             [ft.OutlinedButton("Удалить заказ", icon=ft.Icons.DELETE_OUTLINE, on_click=self._on_delete_click,
-                               style=ft.ButtonStyle(color=ft.Colors.RED))],
+                               style=ft.ButtonStyle(color=theme.ERR))],
             leading=ft.IconButton(ft.Icons.ARROW_BACK, tooltip="К списку", on_click=lambda e: self.on_back()),
         )
 
@@ -144,6 +152,8 @@ class OrderDetailScreen(ft.Column):
             self.deadline_field.error_text = None
             self.price_field.value = pricing.fmt_number(order["price"])
             self.notes_field.value = order["notes"] or ""
+            self.prepayment_field.value = pricing.fmt_number(order["prepayment"]) if order["prepayment"] else ""
+            self.prepayment_field.error_text = None
 
         # Dropdown/Switch коммитятся сразу через on_change, поэтому их можно
         # безопасно обновлять и во время live-sync.
@@ -154,6 +164,8 @@ class OrderDetailScreen(ft.Column):
                                   order["qty"] or 1, bool(order["reverse_engineering"]), order["defect_percent"] or 0)
         self.breakdown_column.controls = price_view.breakdown_rows(calc, order["defect_percent"] or 0,
                                                                    total=order["price"])
+        self.profit_column.controls = price_view.profit_rows(calc, order["material"], total=order["price"])
+        self._render_payment(order)
         manual = abs((order["price"] or 0) - calc["price"]) >= 1
         self.manual_price_note.visible = manual
         self.manual_price_note.value = f"Цена задана вручную (по расчёту — {pricing.money(calc['price'])})"
@@ -178,7 +190,7 @@ class OrderDetailScreen(ft.Column):
         if usage:
             where = usage["plastic"] + (f" · {usage['color']}" if usage["color"] else "")
             self.usage_row.controls = [
-                theme.pill(f"Списано {pricing.fmt_number(usage['grams'])} г с {where}", ft.Colors.GREEN,
+                theme.pill(f"Списано {pricing.fmt_number(usage['grams'])} г с {where}", theme.OK,
                            ft.Icons.CHECK_CIRCLE),
                 ft.TextButton("Отменить списание", icon=ft.Icons.UNDO,
                               on_click=lambda e, uid=usage["id"]: self._undo_usage(uid)),
@@ -250,7 +262,7 @@ class OrderDetailScreen(ft.Column):
         try:
             os.startfile(path)  # noqa: S606 - открытие локального файла по клику пользователя
         except OSError as exc:
-            self.status_banner.color = ft.Colors.RED
+            self.status_banner.color = theme.ERR
             self.status_banner.value = f"Не удалось открыть файл: {exc}"
             self.status_banner.visible = True
             self.update()
@@ -282,6 +294,41 @@ class OrderDetailScreen(ft.Column):
 
     def _on_paid_change(self, e: ft.ControlEvent) -> None:
         db.update_order(self.order_id, paid=1 if self.paid_switch.value else 0)
+        self.refresh()
+
+    def _render_payment(self, order) -> None:
+        price = order["price"] or 0
+        prepayment = order["prepayment"] or 0
+        if order["paid"]:
+            rows = [theme.pill(f"Оплачено полностью: {pricing.money(price)}", theme.OK, ft.Icons.CHECK_CIRCLE)]
+        else:
+            left = pricing.remaining_to_pay(order)
+            rows = [
+                theme.kv_row("Цена заказа", pricing.money(price)),
+                theme.kv_row("Внесено", pricing.money(prepayment)),
+                theme.kv_row("Осталось доплатить", pricing.money(left), bold=True,
+                             color=theme.ERR if left else theme.OK),
+            ]
+            if price:
+                share = min(prepayment / price, 1)
+                rows.insert(0, ft.ProgressBar(value=share, color=theme.OK, bar_height=8, border_radius=4,
+                                              bgcolor=ft.Colors.with_opacity(0.12, theme.OK)))
+        self.payment_summary.controls = rows
+
+    def _on_prepayment_blur(self, e: ft.ControlEvent) -> None:
+        text = (self.prepayment_field.value or "").strip()
+        value = pricing.parse_number(text) if text else 0
+        if value is None:
+            self.prepayment_field.error_text = "Сумма числом, напр. 500"
+            self.update()
+            return
+        self.prepayment_field.error_text = None
+        order = db.get_order(self.order_id)
+        fields = {"prepayment": value}
+        if value and order["price"] and value >= order["price"]:
+            fields["paid"] = 1  # внесли всю сумму — заказ оплачен
+        db.update_order(self.order_id, **fields)
+        self.refresh()
 
     def _on_client_blur(self, e: ft.ControlEvent) -> None:
         db.update_order(self.order_id, client=self.client_field.value, contact=self.contact_field.value)
@@ -339,6 +386,6 @@ class OrderDetailScreen(ft.Column):
             title=ft.Text("Удалить заказ?"),
             content=ft.Text(f"Заказ #{self.order_id} будет удалён без возможности восстановить."),
             actions=[ft.TextButton("Отмена", on_click=cancel),
-                     ft.TextButton("Удалить", on_click=confirm, style=ft.ButtonStyle(color=ft.Colors.RED))],
+                     ft.TextButton("Удалить", on_click=confirm, style=ft.ButtonStyle(color=theme.ERR))],
         )
         self.page.open(dialog)

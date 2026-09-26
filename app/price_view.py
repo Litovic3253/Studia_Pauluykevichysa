@@ -18,3 +18,30 @@ def breakdown_rows(calc: dict, defect_percent: float, total: float | None = None
     rows.append(ft.Divider(height=8))
     rows.append(theme.kv_row("Итого", pricing.money(calc["price"] if total is None else total), bold=True))
     return rows
+
+
+def profit_rows(calc: dict, material: str | None, total: float | None = None) -> list[ft.Control]:
+    """Себестоимость (пластик по закупке + часы печати) и прибыль — всё, что сверх неё.
+    total — фактическая цена заказа, если задана вручную."""
+    price = calc["price"] if total is None else total
+    profit = price - calc["cost"]
+    rows = [
+        theme.kv_row("Пластик по закупке", f"−{pricing.money(calc['purchase_cost'])}"),
+        theme.kv_row("Часы печати", f"−{pricing.money(calc['time_cost'])}"),
+        theme.kv_row("Прибыль", pricing.money(profit), bold=True,
+                     color=theme.OK if profit >= 0 else theme.ERR),
+    ]
+    if material and not calc["has_purchase_price"]:
+        rows.append(ft.Text(f"Закупка «{material}» не указана в «Ценах» — пластик считается бесплатным.",
+                            size=12, color=theme.WARN))
+    return rows
+
+
+def profit_box(rows: list[ft.Control]) -> ft.Container:
+    """Блок прибыли — отдельной подложкой под разбивкой цены."""
+    return ft.Container(
+        ft.Column(rows, spacing=6),
+        padding=12, border_radius=12,
+        bgcolor=ft.Colors.with_opacity(0.07, theme.OK),
+        border=ft.border.all(1, ft.Colors.with_opacity(0.25, theme.OK)),
+    )

@@ -20,9 +20,9 @@ def deadline_view(order) -> ft.Control:
         return ft.Text(date_text, size=13, color=ft.Colors.ON_SURFACE_VARIANT)
     days = (date.fromisoformat(order["deadline"]) - date.today()).days
     if days < 0:
-        return theme.pill(f"{date_text} · просрочен", ft.Colors.RED, ft.Icons.WARNING_AMBER)
+        return theme.pill(f"{date_text} · просрочен", theme.ERR, ft.Icons.WARNING_AMBER)
     if days <= 1:
-        return theme.pill(f"{date_text} · {'сегодня' if days == 0 else 'завтра'}", ft.Colors.ORANGE_800,
+        return theme.pill(f"{date_text} · {'сегодня' if days == 0 else 'завтра'}", theme.WARN,
                           ft.Icons.ALARM)
     return ft.Column([
         ft.Text(date_text, size=13),
@@ -101,7 +101,7 @@ class OrdersScreen(ft.Column):
                            color=ft.Colors.ON_SURFACE_VARIANT, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
         price = ft.Column([
             ft.Text(pricing.money(o["price"]), size=15, weight=ft.FontWeight.W_700),
-            theme.paid_chip(bool(o["paid"])),
+            theme.paid_chip(bool(o["paid"]), pricing.money(o["prepayment"]) if o["prepayment"] else None),
         ], spacing=4, tight=True, horizontal_alignment=ft.CrossAxisAlignment.END)
 
         row = theme.grid([

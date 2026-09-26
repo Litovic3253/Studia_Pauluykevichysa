@@ -23,6 +23,8 @@ ACTIVE_STATUSES = ("new", "queued", "printing", "post", "ready")
 DEFAULT_SETTINGS = {
     # цена материала, ₽ за кг (уже итоговая цена для клиента)
     "materials": {"PLA": 4000, "PETG": 6000, "ABS": 10000},
+    # закупочная цена пластика, ₽ за кг — по ней считается себестоимость и прибыль
+    "purchase_prices": {},
     "hour_rate": 50,        # ₽ за час печати
     "reverse_price": 1000,  # ₽ за реверс-моделирование, если нет STL у заказчика
     "currency": "₽",
@@ -80,6 +82,8 @@ def init() -> None:
         if "updated_at" not in cols:
             c.execute("ALTER TABLE orders ADD COLUMN updated_at TEXT")
             c.execute("UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL")
+        if "prepayment" not in cols:
+            c.execute("ALTER TABLE orders ADD COLUMN prepayment REAL DEFAULT 0")
         c.execute(
             """CREATE TABLE IF NOT EXISTS customers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,6 +136,10 @@ def init() -> None:
         _migrate_pricing_v2(c)
         _migrate_customers_v1(c)
         _migrate_attachments_v1(c)
+        if not c.execute("SELECT 1 FROM settings WHERE key = 'costs_v1'").fetchone():
+            # Себестоимость теперь = закупка пластика + часы печати (раньше — цена материала для клиента).
+            _recalc_costs(c)
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('costs_v1', 'true')")
 
 
 def _migrate_pricing_v2(c) -> None:
@@ -210,6 +218,35 @@ def set_setting(key: str, value) -> None:
         )
 
 
+# ---------- себестоимость ----------
+
+def expense(material: str | None, weight_g: float, hours: float, qty: int, settings: dict) -> dict:
+    """Себестоимость: пластик по закупочной цене + часы печати по ставке. Всё остальное в цене —
+    наценка на материал, брак, реверс-моделирование, ручная цена — это прибыль."""
+    purchase = settings.get("purchase_prices", {}).get(material or "", 0) or 0
+    plastic = (weight_g or 0) * (qty or 1) * purchase / 1000
+    time = (hours or 0) * (qty or 1) * settings["hour_rate"]
+    return {"plastic": plastic, "time": time, "total": plastic + time}
+
+
+def _recalc_costs(c) -> None:
+    settings = dict(DEFAULT_SETTINGS)
+    settings.update({r["key"]: json.loads(r["value"]) for r in c.execute("SELECT key, value FROM settings")
+                     if r["key"] in DEFAULT_SETTINGS})
+    rows = c.execute("SELECT id, material, weight_g, print_hours, qty FROM orders").fetchall()
+    c.executemany("UPDATE orders SET cost = ? WHERE id = ?", [
+        (round(expense(r["material"], r["weight_g"], r["print_hours"], r["qty"], settings)["total"], 2), r["id"])
+        for r in rows
+    ])
+
+
+def recalc_costs() -> None:
+    """Пересчитать себестоимость всех заказов — после смены закупочных цен или ставки часа.
+    Цены заказов не меняются."""
+    with _conn() as c:
+        _recalc_costs(c)
+
+
 # ---------- клиенты ----------
 
 def find_or_create_customer(name: str, contact: str | None) -> int:
@@ -242,8 +279,10 @@ def list_customers(search: str = ""):
         all_customers = c.execute(
             """SELECT c.*,
                 COUNT(o.id) AS orders_count,
-                COALESCE(SUM(CASE WHEN o.paid = 1 THEN o.price END), 0) AS paid_total,
-                COALESCE(SUM(CASE WHEN o.paid = 0 AND o.status != 'cancelled' THEN o.price END), 0) AS debt_total
+                COALESCE(SUM(CASE WHEN o.paid = 1 THEN o.price
+                                  WHEN o.status != 'cancelled' THEN COALESCE(o.prepayment, 0) END), 0) AS paid_total,
+                COALESCE(SUM(CASE WHEN o.paid = 0 AND o.status != 'cancelled'
+                                  THEN MAX(o.price - COALESCE(o.prepayment, 0), 0) END), 0) AS debt_total
             FROM customers c
             LEFT JOIN orders o ON o.customer_id = c.id
             GROUP BY c.id
@@ -302,12 +341,13 @@ def add_order(data: dict) -> int:
     fields = [
         "client", "contact", "description", "file_id", "file_type", "material", "color",
         "weight_g", "print_hours", "qty", "deadline", "cost", "price", "notes",
-        "reverse_engineering", "customer_id", "defect_percent",
+        "reverse_engineering", "customer_id", "defect_percent", "prepayment",
     ]
     data = dict(data)
     if not data.get("customer_id") and data.get("client"):
         data["customer_id"] = find_or_create_customer(data["client"], data.get("contact"))
     data.setdefault("defect_percent", 0)
+    data["prepayment"] = data.get("prepayment") or 0
     values = [data.get(f) for f in fields]
     with _conn() as c:
         now = datetime.now().isoformat(timespec="seconds")
@@ -400,15 +440,20 @@ def stats() -> dict:
         month = datetime.now().strftime("%Y-%m")
         row = c.execute(
             """SELECT
-                COALESCE(SUM(CASE WHEN paid = 1 THEN price END), 0) AS revenue,
+                COALESCE(SUM(CASE WHEN paid = 1 THEN price
+                                  WHEN status != 'cancelled' THEN COALESCE(prepayment, 0) END), 0) AS revenue,
                 COALESCE(SUM(CASE WHEN paid = 1 THEN price - cost END), 0) AS profit,
-                COALESCE(SUM(CASE WHEN paid = 0 AND status != 'cancelled' THEN price END), 0) AS unpaid,
+                COALESCE(SUM(CASE WHEN paid = 1 THEN cost END), 0) AS expense,
+                COALESCE(SUM(CASE WHEN paid = 0 AND status != 'cancelled'
+                                  THEN MAX(price - COALESCE(prepayment, 0), 0) END), 0) AS unpaid,
+                COALESCE(SUM(CASE WHEN paid = 0 AND status != 'cancelled'
+                                  THEN COALESCE(prepayment, 0) END), 0) AS prepaid,
                 COALESCE(SUM(CASE WHEN status != 'cancelled' THEN weight_g * qty END), 0) AS grams
             FROM orders"""
         ).fetchone()
         month_row = c.execute(
             """SELECT COUNT(*) AS n,
-                COALESCE(SUM(CASE WHEN paid = 1 THEN price END), 0) AS revenue
+                COALESCE(SUM(CASE WHEN paid = 1 THEN price ELSE COALESCE(prepayment, 0) END), 0) AS revenue
             FROM orders WHERE substr(created_at, 1, 7) = ? AND status != 'cancelled'""",
             (month,),
         ).fetchone()
@@ -421,7 +466,9 @@ def stats() -> dict:
         "by_status": by_status,
         "revenue": row["revenue"],
         "profit": row["profit"],
+        "expense": row["expense"],
         "unpaid": row["unpaid"],
+        "prepaid": row["prepaid"],
         "grams": row["grams"],
         "month_orders": month_row["n"],
         "month_revenue": month_row["revenue"],
@@ -591,3 +638,40 @@ def change_fingerprint() -> tuple:
         row["customers_count"], row["attachments_count"],
         row["settings_sig"], row["customers_sig"], row["spools_sig"], row["usage_sig"],
     )
+
+
+# ---------- данные для виджетов статистики ----------
+
+def orders_per_day(days: int) -> dict:
+    """{ISO-дата: сколько заказов создано} за последние days дней (отмены не считаются)."""
+    since = (datetime.now().date().toordinal() - days + 1)
+    since_iso = datetime.fromordinal(since).date().isoformat()
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT substr(created_at, 1, 10) AS d, COUNT(*) AS n FROM orders "
+            "WHERE status != 'cancelled' AND substr(created_at, 1, 10) >= ? GROUP BY d",
+            (since_iso,),
+        ).fetchall()
+    return {r["d"]: r["n"] for r in rows}
+
+
+def money_per_month(months: int) -> list[tuple[str, float]]:
+    """[(«ГГГГ-ММ», получено денег)] за последние months месяцев по дате создания заказа:
+    полная цена оплаченных + предоплаты неоплаченных. Старые месяцы — первыми."""
+    today = datetime.now().date()
+    keys = []
+    y, m = today.year, today.month
+    for _ in range(months):
+        keys.append(f"{y:04d}-{m:02d}")
+        y, m = (y, m - 1) if m > 1 else (y - 1, 12)
+    keys.reverse()
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT substr(created_at, 1, 7) AS ym,
+                SUM(CASE WHEN paid = 1 THEN price
+                         WHEN status != 'cancelled' THEN COALESCE(prepayment, 0) ELSE 0 END) AS money
+            FROM orders WHERE substr(created_at, 1, 7) >= ? GROUP BY ym""",
+            (keys[0],),
+        ).fetchall()
+    got = {r["ym"]: r["money"] or 0 for r in rows}
+    return [(k, got.get(k, 0)) for k in keys]

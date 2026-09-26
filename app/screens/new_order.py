@@ -42,10 +42,14 @@ class NewOrderScreen(ft.Column):
         self.reverse_checkbox = ft.Checkbox(label="Реверс-моделирование (у клиента нет 3D-модели)",
                                             on_change=self._recalc)
         self.breakdown_column = ft.Column(spacing=6)
-        self.custom_price_field = theme.field("Своя цена", {"xs": 12}, helper_text="Необязательно — вместо расчётной")
+        self.profit_column = ft.Column(spacing=6)
+        self.custom_price_field = theme.field("Своя цена", {"xs": 12}, helper_text="Необязательно — вместо расчётной",
+                                              on_change=self._recalc)
+        self.prepayment_field = theme.field("Предоплата", {"xs": 12}, suffix_text="₽",
+                                            helper_text="Необязательно — можно внести позже в карточке заказа")
         self.files_text = ft.Text("Файлы не выбраны.", size=13, color=ft.Colors.ON_SURFACE_VARIANT)
         self.file_picker = ft.FilePicker(on_result=self._on_file_picked)
-        self.error_text = ft.Text("", color=ft.Colors.RED)
+        self.error_text = ft.Text("", color=theme.ERR)
 
         form = ft.Column([
             theme.section("Клиент", [theme.grid([self.client_field, self.contact_field, self.description_field])],
@@ -64,7 +68,8 @@ class NewOrderScreen(ft.Column):
 
         summary = theme.section("Итого", [
             self.breakdown_column,
-            theme.grid([self.custom_price_field]),
+            price_view.profit_box([self.profit_column]),
+            theme.grid([self.custom_price_field, self.prepayment_field]),
             self.error_text,
             ft.FilledButton("Создать заказ", icon=ft.Icons.CHECK, on_click=self._on_save,
                             style=ft.ButtonStyle(padding=18), width=10_000),
@@ -103,7 +108,9 @@ class NewOrderScreen(ft.Column):
         result = pricing.calc_price(
             self.material_dd.value, weight, hours, qty, bool(self.reverse_checkbox.value), defect
         )
-        self.breakdown_column.controls = price_view.breakdown_rows(result, defect)
+        custom_price = pricing.parse_number(self.custom_price_field.value)
+        self.breakdown_column.controls = price_view.breakdown_rows(result, defect, total=custom_price)
+        self.profit_column.controls = price_view.profit_rows(result, self.material_dd.value, total=custom_price)
         if self.page:
             self.update()
 
@@ -133,6 +140,12 @@ class NewOrderScreen(ft.Column):
         calc = pricing.calc_price(self.material_dd.value, weight, hours, qty, reverse, defect)
         custom_price = pricing.parse_number(self.custom_price_field.value)
         price = custom_price if custom_price is not None else calc["price"]
+        prepayment_text = (self.prepayment_field.value or "").strip()
+        prepayment = pricing.parse_number(prepayment_text)
+        if prepayment_text and prepayment is None:
+            self.error_text.value = "Предоплата — это сумма числом."
+            self.update()
+            return
 
         order_id = db.add_order({
             "client": self.client_field.value.strip(),
@@ -149,6 +162,7 @@ class NewOrderScreen(ft.Column):
             "notes": "",
             "reverse_engineering": 1 if reverse else 0,
             "defect_percent": defect,
+            "prepayment": prepayment or 0,
         })
 
         dest_dir = LOCAL_STORAGE / str(order_id)
@@ -173,6 +187,7 @@ class NewOrderScreen(ft.Column):
         self.deadline_field.value = ""
         self.reverse_checkbox.value = False
         self.custom_price_field.value = ""
+        self.prepayment_field.value = ""
         self.error_text.value = ""
         self._picked_files = []
         self.files_text.value = "Файлы не выбраны."

@@ -5,6 +5,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+# Шрифты и иконка: из исходников — <проект>/assets, в собранном .exe — распакованная папка PyInstaller.
+ASSETS_DIR = Path(getattr(sys, "_MEIPASS", ROOT)) / "assets"
 
 import flet as ft
 from dotenv import load_dotenv
@@ -64,6 +66,7 @@ def main(page: ft.Page) -> None:
     page.padding = 0
     db.init()
 
+    page.fonts = theme.FONTS
     page.theme = theme.LIGHT_THEME
     page.dark_theme = theme.DARK_THEME
     current_theme_mode = db.get_settings().get("theme_mode", "system")
@@ -75,7 +78,7 @@ def main(page: ft.Page) -> None:
 
     def open_order_from_anywhere(order_id: int) -> None:
         nav_rail.selected_index = 0
-        content.content = orders_section
+        switcher.content = orders_section
         page.update()
         orders_section._open_order(order_id)
 
@@ -95,7 +98,13 @@ def main(page: ft.Page) -> None:
 
     sections = [orders_section, new_order_screen, customers_screen, plastics_screen, spools_screen,
                 prices_screen, stats_screen]
-    content = ft.Container(content=orders_section, expand=True, alignment=ft.alignment.top_center,
+    # Плавная смена экранов: новый проявляется и чуть «подрастает», как виджеты на Motion.
+    switcher = ft.AnimatedSwitcher(
+        orders_section, transition=ft.AnimatedSwitcherTransition.FADE, duration=260, reverse_duration=140,
+        switch_in_curve=ft.AnimationCurve.EASE_OUT_CUBIC, switch_out_curve=ft.AnimationCurve.EASE_IN,
+        expand=True,
+    )
+    content = ft.Container(content=switcher, expand=True, alignment=ft.alignment.top_center,
                            padding=ft.padding.symmetric(horizontal=theme.PAGE_PADDING, vertical=20))
 
     def on_nav_change(e: ft.ControlEvent | None) -> None:
@@ -104,7 +113,7 @@ def main(page: ft.Page) -> None:
             orders_section._back_to_list()  # клик по «Заказы» в меню — всегда к списку
         if section is not new_order_screen and hasattr(section, "refresh"):
             section.refresh()
-        content.content = section
+        switcher.content = section
         page.update()
 
     def toggle_theme(e: ft.ControlEvent) -> None:
@@ -121,7 +130,7 @@ def main(page: ft.Page) -> None:
             saved_path = export_to_excel(e.path)
             page.open(ft.SnackBar(ft.Text(f"Экспортировано: {saved_path}")))
         except Exception as exc:  # noqa: BLE001 - любая ошибка записи файла должна дойти до пользователя
-            page.open(ft.SnackBar(ft.Text(f"Ошибка экспорта: {exc}"), bgcolor=ft.Colors.RED))
+            page.open(ft.SnackBar(ft.Text(f"Ошибка экспорта: {exc}"), bgcolor=theme.ERR))
 
     export_file_picker = ft.FilePicker(on_result=on_export_file_selected)
     page.overlay.append(export_file_picker)
@@ -158,12 +167,12 @@ def main(page: ft.Page) -> None:
         )
 
     def rail_leading(extended: bool) -> ft.Control:
-        logo = ft.Container(ft.Icon(ft.Icons.VIEW_IN_AR, color=ft.Colors.ON_PRIMARY, size=22),
-                            bgcolor=ft.Colors.PRIMARY, border_radius=12, padding=8)
+        logo = ft.Container(ft.Icon(ft.Icons.VIEW_IN_AR, color=ft.Colors.ON_PRIMARY, size=20),
+                            bgcolor=ft.Colors.PRIMARY, border_radius=12, padding=9)
         if not extended:
             return ft.Container(logo, padding=ft.padding.only(top=12, bottom=12))
         return ft.Container(
-            ft.Row([logo, ft.Column([ft.Text("Mochi", size=17, weight=ft.FontWeight.W_700),
+            ft.Row([logo, ft.Column([ft.Text("Mochi", size=17, font_family=theme.FONT_FAMILY_MEDIUM),
                                      ft.Text("заказы 3D-печати", size=11, color=ft.Colors.ON_SURFACE_VARIANT)],
                                     spacing=0, tight=True)], spacing=10),
             padding=ft.padding.only(left=12, top=12, bottom=12),
@@ -174,6 +183,8 @@ def main(page: ft.Page) -> None:
         label_type=ft.NavigationRailLabelType.ALL,
         min_extended_width=230,
         group_alignment=-1.0,
+        indicator_color=ft.Colors.SECONDARY_CONTAINER,
+        bgcolor=ft.Colors.SURFACE,
         destinations=[
             ft.NavigationRailDestination(icon=ft.Icons.RECEIPT_LONG_OUTLINED, selected_icon=ft.Icons.RECEIPT_LONG,
                                          label="Заказы"),
@@ -228,9 +239,9 @@ def main(page: ft.Page) -> None:
     sheets_sync.sync_in_background()  # таблица актуальна сразу после запуска, а не только после первой правки
     page.on_disconnect = lambda e: live_sync.stop()
 
-    page.add(ft.Row([nav_rail, ft.VerticalDivider(width=1), content], expand=True, spacing=0))
+    page.add(ft.Row([nav_rail, ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT), content], expand=True, spacing=0))
     apply_layout()
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    ft.app(target=main, assets_dir=str(ASSETS_DIR))

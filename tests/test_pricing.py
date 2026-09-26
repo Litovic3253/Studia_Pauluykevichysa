@@ -127,7 +127,6 @@ def test_calc_price_adds_defect_percent_of_print_cost(temp_db):
     # материал 100 г × 4000/кг = 400, время 2 ч × 50 = 100 → печать 500
     result = pricing.calc_price("PLA", weight_g=100, hours=2, qty=1, defect_percent=10)
     assert result["defect_cost"] == 50
-    assert result["cost"] == 550
     assert result["price"] == 550
 
 
@@ -156,3 +155,44 @@ def test_recalc_order_price_uses_orders_defect_percent(temp_db):
     order = db.get_order(order_id)
     assert order["defect_percent"] == 20
     assert order["price"] == 600
+
+
+def test_calc_price_cost_is_purchase_plastic_plus_print_hours(temp_db):
+    db.set_setting("materials", {"PLA": 4000})
+    db.set_setting("purchase_prices", {"PLA": 1500})
+    db.set_setting("hour_rate", 50)
+    db.set_setting("reverse_price", 1000)
+    # цена: материал 400 + время 100 + брак 10% 50 + реверс 1000 = 1550
+    # себестоимость: 100 г × 1500/кг = 150 + 2 ч × 50 = 100 → 250
+    result = pricing.calc_price("PLA", weight_g=100, hours=2, qty=1, reverse=True, defect_percent=10)
+    assert result["purchase_cost"] == 150
+    assert result["cost"] == 250
+    assert result["profit"] == 1550 - 250
+
+
+def test_recalc_costs_updates_existing_orders(temp_db):
+    db.set_setting("hour_rate", 50)
+    order_id = db.add_order({"client": "К", "contact": "", "material": "PLA", "weight_g": 200,
+                              "print_hours": 1, "qty": 2, "cost": 0, "price": 3000})
+    db.set_setting("purchase_prices", {"PLA": 1000})
+    db.recalc_costs()
+    order = db.get_order(order_id)
+    assert order["cost"] == 200 * 2 * 1000 / 1000 + 1 * 2 * 50
+    assert order["price"] == 3000
+
+
+def test_prepayment_counts_as_received_and_reduces_debt(temp_db):
+    order_id = db.add_order({"client": "К", "contact": "", "cost": 100, "price": 1000})
+    db.update_order(order_id, prepayment=300)
+    s = db.stats()
+    assert s["revenue"] == 300
+    assert s["unpaid"] == 700
+    assert s["prepaid"] == 300
+    assert s["profit"] == 0  # прибыль — только по оплаченным заказам
+    assert pricing.remaining_to_pay(db.get_order(order_id)) == 700
+    customer = db.list_customers()[0]
+    assert customer["paid_total"] == 300
+    assert customer["debt_total"] == 700
+    db.update_order(order_id, paid=1)
+    s = db.stats()
+    assert s["revenue"] == 1000 and s["unpaid"] == 0 and s["profit"] == 900

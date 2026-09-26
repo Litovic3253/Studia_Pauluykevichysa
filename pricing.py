@@ -113,18 +113,21 @@ def deadline_mark(order) -> str:
 
 def calc_price(material: str | None, weight_g: float, hours: float, qty: int, reverse: bool = False,
                defect_percent: float = 0) -> dict:
-    """Брак — надбавка в % от стоимости печати (материал + время); на реверс-моделирование не начисляется."""
+    """Брак — надбавка в % от стоимости печати (материал + время); на реверс-моделирование не начисляется.
+    cost — себестоимость (пластик по закупке + часы печати), profit — всё, что сверх неё."""
     s = db.get_settings()
     per_kg = s["materials"].get(material or "", 0)
     material_cost = weight_g * qty * per_kg / 1000
     time_cost = hours * qty * s["hour_rate"]
     defect_cost = (material_cost + time_cost) * (defect_percent or 0) / 100
     reverse_cost = s["reverse_price"] if reverse else 0
-    cost = material_cost + time_cost + defect_cost
-    price = cost + reverse_cost
+    price = material_cost + time_cost + defect_cost + reverse_cost
+    exp = db.expense(material, weight_g, hours, qty, s)
     return {
         "material_cost": material_cost, "time_cost": time_cost, "defect_cost": defect_cost,
-        "reverse_cost": reverse_cost, "cost": cost, "price": price,
+        "reverse_cost": reverse_cost, "price": price,
+        "purchase_cost": exp["plastic"], "cost": exp["total"], "profit": price - exp["total"],
+        "has_purchase_price": bool(s.get("purchase_prices", {}).get(material or "")),
     }
 
 
@@ -153,3 +156,10 @@ def recalc_order_price(oid: int) -> None:
     p = calc_price(o["material"], o["weight_g"], o["print_hours"], o["qty"], bool(o["reverse_engineering"]),
                    o["defect_percent"] or 0)
     db.update_order(oid, cost=round(p["cost"], 2), price=p["price"])
+
+
+def remaining_to_pay(order) -> float:
+    """Сколько клиент ещё должен: цена минус предоплата (0, если заказ оплачен)."""
+    if order["paid"]:
+        return 0
+    return max((order["price"] or 0) - (order["prepayment"] or 0), 0)

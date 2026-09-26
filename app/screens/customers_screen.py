@@ -78,7 +78,7 @@ class CustomersScreen(ft.Column):
     def _customer_tile(self, c) -> ft.Control:
         right = [ft.Text(f"{c['orders_count']} зак.", size=12, color=ft.Colors.ON_SURFACE_VARIANT)]
         if c["debt_total"]:
-            right.append(theme.pill(f"долг {pricing.money(c['debt_total'])}", ft.Colors.RED_400))
+            right.append(theme.pill(f"долг {pricing.money(c['debt_total'])}", theme.ERR))
         else:
             right.append(ft.Text(pricing.money(c["paid_total"]), size=13, weight=ft.FontWeight.W_600))
         selected = c["id"] == self.selected_customer_id
@@ -132,8 +132,10 @@ class CustomersScreen(ft.Column):
             self._notes_field = notes_field
 
         orders = [o for o in db.list_orders("all", limit=500) if o["customer_id"] == customer_id]
-        paid = sum(o["price"] or 0 for o in orders if o["paid"])
-        debt = sum(o["price"] or 0 for o in orders if not o["paid"] and o["status"] != "cancelled")
+        # Оплачено — полные оплаты и предоплаты; долг — остаток к оплате (как в db.list_customers).
+        paid = sum((o["price"] or 0) if o["paid"] else (o["prepayment"] or 0) * (o["status"] != "cancelled")
+                   for o in orders)
+        debt = sum(pricing.remaining_to_pay(o) for o in orders if o["status"] != "cancelled")
         history = [self._history_row(o) for o in orders] or [
             ft.Text("Заказов пока нет.", size=13, color=ft.Colors.ON_SURFACE_VARIANT)
         ]
@@ -145,7 +147,7 @@ class CustomersScreen(ft.Column):
         title_row.append(ft.OutlinedButton(
             "Удалить клиента", icon=ft.Icons.DELETE_OUTLINE,
             on_click=lambda e, cid=customer_id, n=len(orders): self._confirm_delete(cid, n),
-            style=ft.ButtonStyle(color=ft.Colors.RED),
+            style=ft.ButtonStyle(color=theme.ERR),
         ))
 
         self.detail_card.visible = True
@@ -154,7 +156,7 @@ class CustomersScreen(ft.Column):
             theme.grid([
                 self._stat("Заказов", str(len(orders))),
                 self._stat("Оплачено", pricing.money(paid)),
-                self._stat("Долг", pricing.money(debt), ft.Colors.RED_400 if debt else None),
+                self._stat("Долг", pricing.money(debt), theme.ERR if debt else None),
             ]),
             theme.grid([name_field, contact_field, notes_field]),
             ft.Text("История заказов", size=15, weight=ft.FontWeight.W_600),
@@ -215,7 +217,7 @@ class CustomersScreen(ft.Column):
             ], tight=True),
             actions=[
                 ft.TextButton("Отмена", on_click=lambda e: self.page.close(dialog)),
-                ft.TextButton("Удалить", on_click=confirm, style=ft.ButtonStyle(color=ft.Colors.RED)),
+                ft.TextButton("Удалить", on_click=confirm, style=ft.ButtonStyle(color=theme.ERR)),
             ],
         )
         self.page.open(dialog)

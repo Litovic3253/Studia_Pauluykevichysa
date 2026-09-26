@@ -1,18 +1,26 @@
-"""Экран «Цены»: таблица материалов и настройки расчёта (ставка часа, реверс, брак, валюта)."""
+"""Экран «Цены»: пластик (закупка → цена для клиента) и настройки расчёта (ставка часа, реверс, брак, валюта)."""
 import flet as ft
 
 import db
 import pricing
 from app import theme
 
+NAME_COL = {"xs": 12, "sm": 3}
+PURCHASE_COL = {"xs": 5, "sm": 4}
+PRICE_COL = {"xs": 5, "sm": 4}
+ACTION_COL = {"xs": 2, "sm": 1}
+
 
 class PricesScreen(ft.Column):
     def __init__(self):
         super().__init__(expand=True, spacing=theme.SPACING, scroll=ft.ScrollMode.AUTO)
-        self.materials_column = ft.Column(spacing=8)
-        self.new_material_name = theme.field("Новый материал", {"xs": 12, "sm": 5}, hint_text="напр. TPU", dense=True)
-        self.new_material_price = theme.field("Цена", {"xs": 8, "sm": 4}, suffix_text="₽/кг", dense=True)
-        self.hour_rate_field = theme.field("Ставка часа печати", {"xs": 12, "sm": 6}, suffix_text="₽/ч", on_blur=self._save_scalars)
+        self.materials_column = ft.Column(spacing=4)
+        self.new_material_name = theme.field("Пластик", NAME_COL, hint_text="напр. TPU", dense=True)
+        self.new_material_purchase = theme.field("Закупка", PURCHASE_COL, suffix_text="₽/кг", dense=True,
+                                                 hint_text="за что купил")
+        self.new_material_price = theme.field("Цена клиенту", PRICE_COL, suffix_text="₽/кг", dense=True)
+        self.hour_rate_field = theme.field("Ставка часа печати", {"xs": 12, "sm": 6}, suffix_text="₽/ч",
+                                           helper_text="Входит в себестоимость", on_blur=self._save_scalars)
         self.reverse_price_field = theme.field("Реверс-моделирование", {"xs": 12, "sm": 6}, suffix_text="₽",
                                                helper_text="Если у клиента нет 3D-модели", on_blur=self._save_scalars)
         self.defect_field = theme.field(
@@ -20,30 +28,41 @@ class PricesScreen(ft.Column):
             helper_text="Подставляется в новые заказы",
         )
         self.currency_field = theme.field("Валюта", {"xs": 12, "sm": 6}, on_blur=self._save_scalars)
-        self.status_text = ft.Text("", size=13, color=ft.Colors.GREEN)
+        self.status_text = ft.Text("", size=13, color=theme.OK)
         self.status_row = ft.Container(self.status_text, visible=False)
 
-        materials = theme.section("Материалы", [
-            ft.Row([ft.Text("Название", size=12, color=ft.Colors.ON_SURFACE_VARIANT, expand=True),
-                    ft.Text("Цена за кг", size=12, color=ft.Colors.ON_SURFACE_VARIANT, width=150),
-                    ft.Container(width=40)]),
+        def head(text: str, col) -> ft.Control:
+            return ft.Text(text, size=12, color=ft.Colors.ON_SURFACE_VARIANT, col=col)
+
+        materials = theme.section("Пластик: закупка и цена", [
+            ft.Text("Закупка — сколько пластик стоил вам, из неё считается себестоимость и прибыль. "
+                    "Цена клиенту — по ней считается цена заказа.", size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+            theme.grid([head("Пластик", NAME_COL), head("Закупка, за кг", PURCHASE_COL),
+                        head("Цена клиенту, за кг", PRICE_COL)], run_spacing=0),
             self.materials_column,
             ft.Divider(height=8),
             theme.grid([
-                self.new_material_name, self.new_material_price,
-                ft.Container(ft.FilledTonalButton("Добавить", icon=ft.Icons.ADD, on_click=self._add_material),
-                             col={"xs": 4, "sm": 3}, alignment=ft.alignment.center_left, padding=ft.padding.only(top=4)),
-            ]),
-        ], icon=ft.Icons.INVENTORY_2_OUTLINED, col={"xs": 12, "lg": 6})
+                self.new_material_name, self.new_material_purchase, self.new_material_price,
+                ft.Container(ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.PRIMARY, icon_size=30,
+                                           tooltip="Добавить пластик", on_click=self._add_material),
+                             col=ACTION_COL, alignment=ft.alignment.center_left),
+            ], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+        ], icon=ft.Icons.INVENTORY_2_OUTLINED, col={"xs": 12, "lg": 7})
 
         settings = theme.section("Расчёт цены", [
             theme.grid([self.hour_rate_field, self.reverse_price_field, self.defect_field, self.currency_field]),
-            ft.Text("Изменения сохраняются, когда вы уходите из поля. Уже созданные заказы не пересчитываются.",
+            ft.Text("Изменения сохраняются, когда вы уходите из поля. Цены уже созданных заказов не меняются, "
+                    "а их себестоимость и прибыль пересчитываются по новой закупке и ставке часа.",
                     size=12, color=ft.Colors.ON_SURFACE_VARIANT),
-        ], icon=ft.Icons.TUNE, col={"xs": 12, "lg": 6})
+            ft.Divider(height=8),
+            ft.Text("Как считается прибыль", size=13, weight=ft.FontWeight.W_600),
+            ft.Text("Прибыль = цена заказа − пластик по закупке − часы печати по ставке. "
+                    "Наценка на пластик, брак, реверс-моделирование и ручная цена — всё это прибыль.",
+                    size=12, color=ft.Colors.ON_SURFACE_VARIANT),
+        ], icon=ft.Icons.TUNE, col={"xs": 12, "lg": 5})
 
         self.controls = [
-            theme.page_header("Цены", "Материалы и параметры, по которым считается цена заказа"),
+            theme.page_header("Цены", "Закупка пластика, цены для клиента и параметры расчёта"),
             self.status_row,
             theme.grid([materials, settings]),
         ]
@@ -55,9 +74,10 @@ class PricesScreen(ft.Column):
 
     def refresh(self) -> None:
         settings = db.get_settings()
+        purchase = settings["purchase_prices"]
         self.materials_column.controls = [
-            self._material_row(name, price) for name, price in settings["materials"].items()
-        ] or [ft.Text("Материалов нет — добавьте первый ниже.", size=13, color=ft.Colors.ON_SURFACE_VARIANT)]
+            self._material_row(name, purchase.get(name), price) for name, price in settings["materials"].items()
+        ] or [ft.Text("Пластика нет — добавьте первый ниже.", size=13, color=ft.Colors.ON_SURFACE_VARIANT)]
         self.hour_rate_field.value = pricing.fmt_number(settings["hour_rate"])
         self.reverse_price_field.value = pricing.fmt_number(settings["reverse_price"])
         self.defect_field.value = pricing.fmt_number(settings["defect_percent"])
@@ -65,59 +85,100 @@ class PricesScreen(ft.Column):
         if self.page:
             self.update()
 
-    def _material_row(self, name: str, price: float) -> ft.Control:
-        price_field = ft.TextField(value=pricing.fmt_number(price), width=150, dense=True, suffix_text="₽/кг",
-                                   border_radius=theme.FIELD_RADIUS, text_align=ft.TextAlign.RIGHT)
+    def _say(self, text: str, ok: bool = True) -> None:
+        self.status_text.color = theme.OK if ok else theme.ERR
+        self.status_text.value = text
 
-        def save(e: ft.ControlEvent) -> None:
-            value = pricing.parse_number(price_field.value)
-            if value is None:
-                price_field.error_text = "Число"
+    def _material_row(self, name: str, purchase: float | None, price: float) -> ft.Control:
+        def number_field(value, col, hint: str = "") -> ft.TextField:
+            return ft.TextField(value=pricing.fmt_number(value) if value else "", dense=True, suffix_text="₽/кг",
+                                hint_text=hint, border_radius=theme.FIELD_RADIUS, text_align=ft.TextAlign.RIGHT,
+                                col=col)
+
+        purchase_field = number_field(purchase, PURCHASE_COL, "не указана")
+        price_field = number_field(price, PRICE_COL)
+        margin_text = ft.Text(self._margin_label(purchase, price), size=11, color=ft.Colors.ON_SURFACE_VARIANT)
+
+        def save(field: ft.TextField, key: str) -> None:
+            text = (field.value or "").strip()
+            value = pricing.parse_number(text)
+            if value is None and not (key == "purchase_prices" and not text):
+                field.error_text = "Число"
                 self.update()
                 return
-            price_field.error_text = None
+            field.error_text = None
             settings = db.get_settings()
-            settings["materials"][name] = value
-            db.set_setting("materials", settings["materials"])
-            self.status_text.value = f"Сохранено: {name} — {pricing.fmt_number(value)} ₽/кг"
+            if value is None:
+                settings[key].pop(name, None)  # закупку стёрли — «не указана»
+            else:
+                settings[key][name] = value
+            db.set_setting(key, settings[key])
+            if key == "purchase_prices":
+                db.recalc_costs()
+                self._say(f"Сохранено: закупка {name} — {pricing.fmt_number(value)} ₽/кг" if value is not None
+                          else f"Закупка {name} не указана")
+            else:
+                self._say(f"Сохранено: {name} для клиента — {pricing.fmt_number(value)} ₽/кг")
+            settings = db.get_settings()
+            margin_text.value = self._margin_label(settings["purchase_prices"].get(name), settings["materials"][name])
             self.update()
 
         def delete(e: ft.ControlEvent) -> None:
             settings = db.get_settings()
             settings["materials"].pop(name, None)
+            settings["purchase_prices"].pop(name, None)
             db.set_setting("materials", settings["materials"])
-            self.status_text.value = f"Удалено: {name}"
+            db.set_setting("purchase_prices", settings["purchase_prices"])
+            self._say(f"Удалено: {name}")
             self.refresh()
 
-        price_field.on_blur = save
-        return ft.Row([
-            ft.Text(name, weight=ft.FontWeight.W_600, expand=True),
-            price_field,
-            ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip=f"Удалить {name}", on_click=delete, width=40),
-        ], vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        purchase_field.on_blur = lambda e: save(purchase_field, "purchase_prices")
+        price_field.on_blur = lambda e: save(price_field, "materials")
+        row = theme.grid([
+            ft.Column([ft.Text(name, weight=ft.FontWeight.W_600), margin_text], spacing=0, tight=True, col=NAME_COL),
+            purchase_field, price_field,
+            ft.Container(ft.IconButton(ft.Icons.DELETE_OUTLINE, tooltip=f"Удалить {name}", on_click=delete),
+                         col=ACTION_COL, alignment=ft.alignment.center_left),
+        ], vertical_alignment=ft.CrossAxisAlignment.CENTER, run_spacing=6)
+        return theme.add_hover(ft.Container(row, padding=ft.padding.symmetric(horizontal=8, vertical=6),
+                                            border_radius=12, border=ft.border.all(1, ft.Colors.TRANSPARENT)))
+
+    @staticmethod
+    def _margin_label(purchase: float | None, price: float) -> str:
+        if not purchase:
+            return "укажите закупку"
+        return f"наценка +{pricing.money(price - purchase)}/кг"
 
     def _add_material(self, e: ft.ControlEvent) -> None:
         name = (self.new_material_name.value or "").strip()
         value = pricing.parse_number(self.new_material_price.value)
-        if not name or value is None:
-            self.status_text.color = ft.Colors.RED
-            self.status_text.value = "Укажите название материала и цену."
+        purchase_text = (self.new_material_purchase.value or "").strip()
+        purchase = pricing.parse_number(purchase_text)
+        if not name or value is None or (purchase_text and purchase is None):
+            self._say("Укажите название пластика и цену для клиента (закупка — числом, можно позже).", ok=False)
             self.update()
             return
         settings = db.get_settings()
         settings["materials"][name] = value
         db.set_setting("materials", settings["materials"])
+        if purchase is not None:
+            settings["purchase_prices"][name] = purchase
+            db.set_setting("purchase_prices", settings["purchase_prices"])
+            db.recalc_costs()
         self.new_material_name.value = ""
+        self.new_material_purchase.value = ""
         self.new_material_price.value = ""
-        self.status_text.color = ft.Colors.GREEN
-        self.status_text.value = f"Добавлено: {name}"
+        self._say(f"Добавлено: {name}")
         self.refresh()
 
     def _save_scalars(self, e: ft.ControlEvent) -> None:
+        settings = db.get_settings()
         hour_rate = pricing.parse_number(self.hour_rate_field.value)
         reverse_price = pricing.parse_number(self.reverse_price_field.value)
         if hour_rate is not None:
             db.set_setting("hour_rate", hour_rate)
+            if hour_rate != settings["hour_rate"]:
+                db.recalc_costs()
         if reverse_price is not None:
             db.set_setting("reverse_price", reverse_price)
         defect = pricing.parse_number(self.defect_field.value)
@@ -125,6 +186,5 @@ class PricesScreen(ft.Column):
             db.set_setting("defect_percent", defect)
         if self.currency_field.value:
             db.set_setting("currency", self.currency_field.value.strip())
-        self.status_text.color = ft.Colors.GREEN
-        self.status_text.value = "Настройки сохранены."
+        self._say("Настройки сохранены.")
         self.update()

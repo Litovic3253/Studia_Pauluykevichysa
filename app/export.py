@@ -6,8 +6,8 @@ import db
 
 ORDER_COLUMNS = [
     "ID", "Клиент", "Контакт", "Описание", "Материал", "Цвет", "Вес, г",
-    "Часы печати", "Кол-во", "Брак, %", "Срок", "Статус", "Оплачен", "Себестоимость",
-    "Цена", "Заметки", "Создан",
+    "Часы печати", "Кол-во", "Брак, %", "Срок", "Статус", "Оплачен", "Предоплата", "Себестоимость",
+    "Цена", "Прибыль", "Заметки", "Создан",
 ]
 
 CUSTOMER_COLUMNS = ["ID", "Имя", "Контакт", "Заметки", "Заказов", "Оплачено", "Долг", "Создан"]
@@ -30,8 +30,10 @@ def build_orders_sheet() -> list[list[Any]]:
             o["deadline"] or "",
             db.STATUSES.get(o["status"], o["status"]),
             "Да" if o["paid"] else "Нет",
+            o["prepayment"] or 0,
             o["cost"] or 0,
             o["price"] or 0,
+            round((o["price"] or 0) - (o["cost"] or 0), 2),
             o["notes"] or "",
             o["created_at"],
         ])
@@ -58,6 +60,9 @@ def build_prices_sheet() -> list[list[Any]]:
     settings = db.get_settings()
     rows: list[list[Any]] = [["Материал", "Цена за кг"]]
     rows.extend([name, price] for name, price in settings["materials"].items())
+    rows.append([])
+    rows.append(["Пластик", "Закупка за кг"])
+    rows.extend([name, price] for name, price in settings["purchase_prices"].items())
     rows.append([])
     rows.append(["Параметр", "Значение"])
     rows.append(["Ставка часа печати", settings["hour_rate"]])
