@@ -64,3 +64,22 @@ def test_pdf_has_no_internal_numbers(temp_db):
 def test_file_name_strips_unsafe_characters():
     assert client_pdf.file_name({"id": 7, "client": 'ИП "Рога/Копыта"'}) == "Заказ_7_ИП_Рога_Копыта.pdf"
     assert client_pdf.file_name({"id": 8, "client": ""}) == "Заказ_8.pdf"
+
+
+def test_payment_line_printed_only_when_set(temp_db, tmp_path, monkeypatch):
+    _setup()
+    oid = _order()
+    printed = []
+    monkeypatch.setattr(client_pdf, "_payment_box", lambda pdf, text, width: printed.append(text))
+    client_pdf.build_order_pdf(oid, tmp_path)
+    assert printed == []
+    db.set_setting("payment_text", "89001234567 Иван Иванович банк: Сбер")
+    client_pdf.build_order_pdf(oid, tmp_path)
+    assert printed == ["89001234567 Иван Иванович банк: Сбер"]
+
+
+def test_payment_box_renders_long_text(temp_db, tmp_path):
+    _setup()
+    db.set_setting("payment_text", "89001234567 Иван Иванович банк: Сбер " * 4)
+    path = client_pdf.build_order_pdf(_order(), tmp_path)
+    assert path.read_bytes().startswith(b"%PDF")

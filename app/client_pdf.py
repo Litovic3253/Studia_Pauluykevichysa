@@ -178,11 +178,37 @@ def build_order_pdf(order_id: int, folder: Path | None = None) -> Path:
     pdf.cell(width - 40, 8, "Итого")
     pdf.cell(40, 8, _money(total), align="R", new_x="LMARGIN", new_y="NEXT")
 
+    payment = (db.get_settings().get("payment_text") or "").strip()
+    if payment:
+        _payment_box(pdf, payment, width)
+
     folder = folder or PDF_DIR
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / file_name(order)
     pdf.output(str(path))
     return path
+
+
+def _payment_box(pdf: FPDF, text: str, width: float) -> None:
+    """«Оплата: …» — в рамке цвета акцента под итогом, чтобы клиент сразу видел, куда переводить."""
+    pdf.ln(6)
+    pdf.set_font("mono", size=11)
+    lines = pdf.multi_cell(width - 12 - 22, 7, text, dry_run=True, output="LINES")
+    box_h = 7 * len(lines) + 8
+    # Рамке можно опуститься ниже обычного поля — до подписи внизу страницы (она на 14 мм от края).
+    if pdf.get_y() + box_h > pdf.h - 17:
+        pdf.add_page()
+    y = pdf.get_y()
+    pdf.set_draw_color(*ACCENT)
+    pdf.set_line_width(0.5)
+    pdf.rect(18, y, width, box_h, style="D", round_corners=True, corner_radius=3)
+    pdf.set_line_width(0.2)
+    pdf.set_xy(24, y + 4)
+    pdf.set_font("mono", "B", 11)
+    pdf.set_text_color(*INK)
+    pdf.cell(22, 7, "Оплата:")
+    pdf.set_font("mono", size=11)
+    pdf.multi_cell(width - 12 - 22, 7, text, new_x="LMARGIN", new_y="NEXT")
 
 
 def _heading(pdf: FPDF, text: str) -> None:

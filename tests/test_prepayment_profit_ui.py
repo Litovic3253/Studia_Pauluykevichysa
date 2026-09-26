@@ -83,3 +83,12 @@ def test_prices_screen_adds_plastic_with_purchase_and_recalcs_costs(temp_db, mon
     assert settings["materials"]["TPU"] == 7
     assert settings["purchase_prices"]["TPU"] == 2
     assert db.get_order(order_id)["cost"] == 200
+
+
+def test_prices_screen_saves_payment_text(temp_db, monkeypatch):
+    screen = PricesScreen()
+    monkeypatch.setattr(screen, "update", lambda: None)
+    screen.refresh()
+    screen.payment_field.value = "  89001234567 Иван банк: Сбер "
+    screen._save_scalars(None)
+    assert db.get_settings()["payment_text"] == "89001234567 Иван банк: Сбер"

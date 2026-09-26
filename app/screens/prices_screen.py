@@ -28,6 +28,11 @@ class PricesScreen(ft.Column):
             helper_text="Подставляется в новые заказы",
         )
         self.currency_field = theme.field("Валюта", {"xs": 12, "sm": 6}, on_blur=self._save_scalars)
+        self.payment_field = theme.field(
+            "Оплата в PDF для клиента", {"xs": 12}, on_blur=self._save_scalars,
+            hint_text="89001234567 Имя Отчество банк: Сбер",
+            helper_text="Печатается внизу PDF строкой «Оплата: …». Пусто — строки не будет",
+        )
         self.status_text = ft.Text("", size=13, color=theme.OK)
         self.status_row = ft.Container(self.status_text, visible=False)
 
@@ -50,7 +55,8 @@ class PricesScreen(ft.Column):
         ], icon=ft.Icons.INVENTORY_2_OUTLINED, col={"xs": 12, "lg": 7})
 
         settings = theme.section("Расчёт цены", [
-            theme.grid([self.hour_rate_field, self.reverse_price_field, self.defect_field, self.currency_field]),
+            theme.grid([self.hour_rate_field, self.reverse_price_field, self.defect_field, self.currency_field,
+                        self.payment_field]),
             ft.Text("Изменения сохраняются, когда вы уходите из поля. Цены уже созданных заказов не меняются, "
                     "а их себестоимость и прибыль пересчитываются по новой закупке.",
                     size=12, color=ft.Colors.ON_SURFACE_VARIANT),
@@ -82,6 +88,7 @@ class PricesScreen(ft.Column):
         self.reverse_price_field.value = pricing.fmt_number(settings["reverse_price"])
         self.defect_field.value = pricing.fmt_number(settings["defect_percent"])
         self.currency_field.value = settings["currency"]
+        self.payment_field.value = settings["payment_text"]
         if self.page:
             self.update()
 
@@ -183,5 +190,6 @@ class PricesScreen(ft.Column):
             db.set_setting("defect_percent", defect)
         if self.currency_field.value:
             db.set_setting("currency", self.currency_field.value.strip())
+        db.set_setting("payment_text", (self.payment_field.value or "").strip())
         self._say("Настройки сохранены.")
         self.update()
