@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 import db
 from app import sheets_sync, theme
 from app.excel_writer import export_to_excel
+from app.github_panel import GithubPanel
 from app.live_sync import LiveSync
 from app.report_dialog import ReportDialog
 from app.sidebar import Action, Destination, Sidebar
@@ -169,13 +170,28 @@ def main(page: ft.Page) -> None:
     report_dialog = ReportDialog(page, on_saved=lambda path: show_message(f"Смета сохранена: {path}"),
                                  on_error=lambda msg: show_message(f"Не удалось сохранить смету: {msg}", True))
 
+    def on_data_downloaded() -> None:
+        """База заменена скачанной из GitHub: все экраны перечитывают данные."""
+        db.set_setting("theme_mode", current_theme_mode)  # тема — своя на каждом компьютере
+        if orders_section.detail_screen is not None:
+            orders_section._back_to_list()  # открытого заказа в новой базе может не быть
+        for section in sections:
+            if section is not new_order_screen and hasattr(section, "refresh"):
+                section.refresh()
+        page.update()
+
+    github_panel = GithubPanel(page, on_downloaded=on_data_downloaded)
+
     def sidebar_actions() -> list[Action]:
-        """Тема, смета и экспорт внизу меню."""
+        """Тема, смета, экспорт и синхронизация с GitHub внизу меню."""
         return [
             Action(theme.theme_icon(current_theme_mode), f"Тема: {theme.theme_name(current_theme_mode)}",
                    lambda e: theme_dialog.open(current_theme_mode)),
             Action(ft.Icons.REQUEST_QUOTE_OUTLINED, "Смета за период", lambda e: report_dialog.open()),
             Action(ft.Icons.FILE_DOWNLOAD_OUTLINED, "Экспорт всех данных", on_export_click),
+            Action(ft.Icons.CLOUD_UPLOAD_OUTLINED, "Выгрузить в GitHub", lambda e: github_panel.upload()),
+            Action(ft.Icons.CLOUD_DOWNLOAD_OUTLINED, "Скачать из GitHub", lambda e: github_panel.download()),
+            Action(ft.Icons.SETTINGS_OUTLINED, "Настройка GitHub", lambda e: github_panel.open_settings()),
         ]
 
     def sidebar_leading(extended: bool) -> ft.Control:
@@ -222,6 +238,7 @@ def main(page: ft.Page) -> None:
         plastics_screen.refresh()
         spools_screen.refresh()
         sheets_sync.sync_in_background()
+        github_panel.auto_upload()
 
     page.pubsub.subscribe(lambda _: on_db_changed())
     splash.step(97, "Запускаю синхронизацию…")
@@ -236,6 +253,7 @@ def main(page: ft.Page) -> None:
     page.add(ft.Row([nav_rail, ft.VerticalDivider(width=1, color=ft.Colors.OUTLINE_VARIANT), content],
                     expand=True, spacing=0, vertical_alignment=ft.CrossAxisAlignment.STRETCH))
     apply_layout()
+    github_panel.check_on_start()  # после показа окна: сообщение «в GitHub есть новые данные» должно быть видно
 
 
 if __name__ == "__main__":

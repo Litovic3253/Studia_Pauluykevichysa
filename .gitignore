@@ -1,5 +1,7 @@
 .env
 orders.db
+orders.backup*.db
+github_sync.json
 .venv/
 __pycache__/
 *.log
