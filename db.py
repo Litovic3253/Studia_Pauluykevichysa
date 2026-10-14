@@ -30,6 +30,7 @@ DEFAULT_SETTINGS = {
     "reverse_price": 1000,  # ₽ за реверс-моделирование, если нет STL у заказчика
     "currency": "₽",
     "defect_percent": 10,   # % брака по умолчанию — подставляется в новые заказы
+    "components_markup": 20,  # % наценки на компоненты электроники — подставляется в новые заказы
     "owners": [],        # telegram id владельцев (если ADMIN_IDS не задан в .env)
     "reminder_hour": 9,  # во сколько присылать сводку по дедлайнам
     "last_reminder": "",
@@ -88,6 +89,12 @@ def init() -> None:
             c.execute("UPDATE orders SET updated_at = created_at WHERE updated_at IS NULL")
         if "prepayment" not in cols:
             c.execute("ALTER TABLE orders ADD COLUMN prepayment REAL DEFAULT 0")
+        for col, ddl in (("has_print", "INTEGER DEFAULT 1"), ("has_electronics", "INTEGER DEFAULT 0"),
+                         ("soldering_price", "REAL DEFAULT 0"), ("firmware_price", "REAL DEFAULT 0"),
+                         ("components_markup", "REAL DEFAULT 0")):
+            if col not in cols:
+                # Старые заказы — только печать, без электроники: цены не меняются.
+                c.execute(f"ALTER TABLE orders ADD COLUMN {col} {ddl}")
         c.execute(
             """CREATE TABLE IF NOT EXISTS customers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,6 +116,15 @@ def init() -> None:
                 filename TEXT,
                 file_type TEXT,
                 added_at TEXT NOT NULL
+            )"""
+        )
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS order_components (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id INTEGER NOT NULL REFERENCES orders(id),
+                name TEXT NOT NULL,
+                qty REAL NOT NULL DEFAULT 1,
+                unit_cost REAL NOT NULL DEFAULT 0
             )"""
         )
         c.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
@@ -246,22 +262,28 @@ def set_setting(key: str, value) -> None:
 
 # ---------- себестоимость ----------
 
-def expense(material: str | None, weight_g: float, hours: float, qty: int, settings: dict) -> dict:
-    """Себестоимость: только пластик по закупочной цене. Всё остальное в цене — часы печати,
-    наценка на материал, брак, реверс-моделирование, ручная цена — это прибыль."""
+def expense(material: str | None, weight_g: float, hours: float, qty: int, settings: dict,
+            components_purchase: float = 0, has_print: bool = True) -> dict:
+    """Себестоимость: пластик по закупочной цене + компоненты электроники по закупке. Всё остальное
+    в цене — часы печати, наценки, брак, реверс-моделирование, пайка, прошивка, ручная цена — это прибыль."""
     purchase = settings.get("purchase_prices", {}).get(material or "", 0) or 0
-    plastic = (weight_g or 0) * (qty or 1) * purchase
-    time = (hours or 0) * (qty or 1) * settings["hour_rate"]
-    return {"plastic": plastic, "time": time, "total": plastic}
+    plastic = (weight_g or 0) * (qty or 1) * purchase if has_print else 0
+    time = (hours or 0) * (qty or 1) * settings["hour_rate"] if has_print else 0
+    components = components_purchase or 0
+    return {"plastic": plastic, "components": components, "time": time, "total": plastic + components}
 
 
 def _recalc_costs(c) -> None:
     settings = dict(DEFAULT_SETTINGS)
     settings.update({r["key"]: json.loads(r["value"]) for r in c.execute("SELECT key, value FROM settings")
                      if r["key"] in DEFAULT_SETTINGS})
-    rows = c.execute("SELECT id, material, weight_g, print_hours, qty FROM orders").fetchall()
+    rows = c.execute(
+        "SELECT o.id, o.material, o.weight_g, o.print_hours, o.qty, o.has_print, o.has_electronics, "
+        "(SELECT COALESCE(SUM(qty * unit_cost), 0) FROM order_components oc WHERE oc.order_id = o.id) AS parts "
+        "FROM orders o").fetchall()
     c.executemany("UPDATE orders SET cost = ? WHERE id = ?", [
-        (round(expense(r["material"], r["weight_g"], r["print_hours"], r["qty"], settings)["total"], 2), r["id"])
+        (round(expense(r["material"], r["weight_g"], r["print_hours"], r["qty"], settings,
+                       r["parts"] if r["has_electronics"] else 0, bool(r["has_print"]))["total"], 2), r["id"])
         for r in rows
     ])
 
@@ -355,6 +377,10 @@ def delete_customer(customer_id: int, delete_orders: bool = False) -> None:
                 "DELETE FROM attachments WHERE order_id IN (SELECT id FROM orders WHERE customer_id = ?)",
                 (customer_id,),
             )
+            c.execute(
+                "DELETE FROM order_components WHERE order_id IN (SELECT id FROM orders WHERE customer_id = ?)",
+                (customer_id,),
+            )
             c.execute("DELETE FROM orders WHERE customer_id = ?", (customer_id,))
         else:
             c.execute("UPDATE orders SET customer_id = NULL WHERE customer_id = ?", (customer_id,))
@@ -368,12 +394,17 @@ def add_order(data: dict) -> int:
         "client", "contact", "description", "file_id", "file_type", "material", "color",
         "weight_g", "print_hours", "qty", "deadline", "cost", "price", "notes",
         "reverse_engineering", "customer_id", "defect_percent", "prepayment",
+        "has_print", "has_electronics", "soldering_price", "firmware_price", "components_markup",
     ]
     data = dict(data)
     if not data.get("customer_id") and data.get("client"):
         data["customer_id"] = find_or_create_customer(data["client"], data.get("contact"))
     data.setdefault("defect_percent", 0)
     data["prepayment"] = data.get("prepayment") or 0
+    data["has_print"] = 1 if data.get("has_print", 1) else 0
+    data["has_electronics"] = 1 if data.get("has_electronics") else 0
+    for key in ("soldering_price", "firmware_price", "components_markup"):
+        data[key] = data.get(key) or 0
     values = [data.get(f) for f in fields]
     with _conn() as c:
         now = datetime.now().isoformat(timespec="seconds")
@@ -422,6 +453,7 @@ def renumber_order(old_id: int, new_id: int, storage_dir: Path | None = None) ->
             c.execute("UPDATE orders SET id = ?, updated_at = ? WHERE id = ?",
                       (new_id, datetime.now().isoformat(), old_id))
             c.execute("UPDATE spool_usage SET order_id = ? WHERE order_id = ?", (new_id, old_id))
+            c.execute("UPDATE order_components SET order_id = ? WHERE order_id = ?", (new_id, old_id))
             for a in c.execute("SELECT id, local_path FROM attachments WHERE order_id = ?", (old_id,)).fetchall():
                 path = a["local_path"]
                 if path and Path(path).parent == old_dir:
@@ -462,6 +494,7 @@ def set_order_created(order_id: int, day: str) -> None:
 
 def delete_order(order_id: int) -> None:
     with _conn() as c:
+        c.execute("DELETE FROM order_components WHERE order_id = ?", (order_id,))
         c.execute("DELETE FROM orders WHERE id = ?", (order_id,))
 
 
@@ -511,8 +544,9 @@ def search_orders(text: str, limit: int = 40):
     with _conn() as c:
         return c.execute(
             "SELECT * FROM orders WHERE client LIKE ? OR contact LIKE ? OR description LIKE ? "
-            "OR notes LIKE ? ORDER BY id DESC LIMIT ?",
-            (like, like, like, like, limit),
+            "OR notes LIKE ? OR id IN (SELECT order_id FROM order_components WHERE name LIKE ?) "
+            "ORDER BY id DESC LIMIT ?",
+            (like, like, like, like, like, limit),
         ).fetchall()
 
 
@@ -533,7 +567,7 @@ def stats() -> dict:
                                   THEN MAX(price - COALESCE(prepayment, 0), 0) END), 0) AS unpaid,
                 COALESCE(SUM(CASE WHEN paid = 0 AND status != 'cancelled'
                                   THEN COALESCE(prepayment, 0) END), 0) AS prepaid,
-                COALESCE(SUM(CASE WHEN status != 'cancelled' THEN weight_g * qty END), 0) AS grams
+                COALESCE(SUM(CASE WHEN status != 'cancelled' AND has_print = 1 THEN weight_g * qty END), 0) AS grams
             FROM orders"""
         ).fetchone()
         month_row = c.execute(
@@ -544,7 +578,7 @@ def stats() -> dict:
         ).fetchone()
         materials = c.execute(
             """SELECT material, SUM(weight_g * qty) AS grams FROM orders
-            WHERE status != 'cancelled' AND material IS NOT NULL
+            WHERE status != 'cancelled' AND has_print = 1 AND material IS NOT NULL
             GROUP BY material ORDER BY grams DESC"""
         ).fetchall()
     return {
@@ -696,6 +730,40 @@ def delete_attachment(attachment_id: int) -> None:
         c.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
 
 
+# ---------- компоненты электроники ----------
+
+def set_components(order_id: int, components: list[dict]) -> None:
+    """Заменяет компоненты заказа целиком. Строки без названия пропускаются."""
+    rows = [((comp.get("name") or "").strip(), comp.get("qty") or 0, comp.get("unit_cost") or 0)
+            for comp in components]
+    with _conn() as c:
+        c.execute("DELETE FROM order_components WHERE order_id = ?", (order_id,))
+        c.executemany("INSERT INTO order_components (order_id, name, qty, unit_cost) VALUES (?, ?, ?, ?)",
+                      [(order_id, *r) for r in rows if r[0]])
+
+
+def list_components(order_id: int) -> list[sqlite3.Row]:
+    with _conn() as c:
+        return c.execute("SELECT * FROM order_components WHERE order_id = ? ORDER BY id", (order_id,)).fetchall()
+
+
+def components_by_order() -> dict[int, list[sqlite3.Row]]:
+    """{номер заказа: его компоненты} — для списка заказов и выгрузки одним запросом."""
+    grouped: dict[int, list[sqlite3.Row]] = {}
+    with _conn() as c:
+        for r in c.execute("SELECT * FROM order_components ORDER BY order_id, id"):
+            grouped.setdefault(r["order_id"], []).append(r)
+    return grouped
+
+
+def component_catalog() -> dict[str, float]:
+    """{название: закупка за штуку} из прошлых заказов — последняя цена; для подсказок при вводе."""
+    with _conn() as c:
+        rows = c.execute("SELECT name, unit_cost FROM order_components ORDER BY id").fetchall()
+    latest = {r["name"]: r["unit_cost"] for r in rows}
+    return dict(sorted(latest.items(), key=lambda kv: kv[0].lower()))
+
+
 # ---------- отпечаток состояния (для live-обновления) ----------
 
 def change_fingerprint() -> tuple:
@@ -716,12 +784,15 @@ def change_fingerprint() -> tuple:
             "|| COALESCE(notes, ''), ';') FROM (SELECT * FROM customers ORDER BY id)) AS customers_sig, "
             "(SELECT COUNT(*) || ':' || COALESCE(SUM(archived), 0) FROM spools) AS spools_sig, "
             "(SELECT COUNT(*) || ':' || COALESCE(MAX(id), 0) || ':' || COALESCE(SUM(grams), 0) "
-            "FROM spool_usage) AS usage_sig"
+            "FROM spool_usage) AS usage_sig, "
+            "(SELECT COUNT(*) || ':' || COALESCE(MAX(id), 0) || ':' || COALESCE(SUM(qty * unit_cost), 0) "
+            "FROM order_components) AS components_sig"
         ).fetchone()
     return (
         row["orders_count"], row["max_order_id"], row["max_updated_at"],
         row["customers_count"], row["attachments_count"],
         row["settings_sig"], row["customers_sig"], row["spools_sig"], row["usage_sig"],
+        row["components_sig"],
     )
 
 
