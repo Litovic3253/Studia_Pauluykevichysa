@@ -131,23 +131,43 @@ def deadline_mark(order) -> str:
 
 
 def calc_price(material: str | None, weight_g: float, hours: float, qty: int, reverse: bool = False,
-               defect_percent: float = 0) -> dict:
-    """Брак — надбавка в % от стоимости печати (материал + время); на реверс-моделирование не начисляется.
-    cost — себестоимость (пластик по закупке), profit — всё, что сверх неё."""
+               defect_percent: float = 0, *, has_print: bool = True, has_electronics: bool = False,
+               components=(), markup: float = 0, soldering: float = 0, firmware: float = 0) -> dict:
+    """Печать: брак — надбавка в % от стоимости печати (материал + время); на реверс не начисляется.
+    Электроника (на весь заказ, «Кол-во» её не умножает): компоненты по закупке × (1 + наценка %),
+    пайка и прошивка — суммами. Выключенная часть не считается, даже если поля заполнены.
+    cost — себестоимость (пластик + компоненты по закупке), profit — всё, что сверх неё."""
     s = db.get_settings()
     per_gram = s["materials"].get(material or "", 0)  # ₽ за грамм
-    material_cost = weight_g * qty * per_gram
-    time_cost = hours * qty * s["hour_rate"]
+    material_cost = weight_g * qty * per_gram if has_print else 0
+    time_cost = hours * qty * s["hour_rate"] if has_print else 0
     defect_cost = (material_cost + time_cost) * (defect_percent or 0) / 100
-    reverse_cost = s["reverse_price"] if reverse else 0
-    price = material_cost + time_cost + defect_cost + reverse_cost
-    exp = db.expense(material, weight_g, hours, qty, s)
+    reverse_cost = s["reverse_price"] if reverse and has_print else 0
+    purchase = sum((c["qty"] or 0) * (c["unit_cost"] or 0) for c in components) if has_electronics else 0
+    components_cost = purchase * (1 + (markup or 0) / 100)
+    soldering_cost = (soldering or 0) if has_electronics else 0
+    firmware_cost = (firmware or 0) if has_electronics else 0
+    price = material_cost + time_cost + defect_cost + reverse_cost + components_cost + soldering_cost + firmware_cost
+    exp = db.expense(material, weight_g, hours, qty, s, purchase, has_print)
     return {
         "material_cost": material_cost, "time_cost": time_cost, "defect_cost": defect_cost,
-        "reverse_cost": reverse_cost, "price": price,
+        "reverse_cost": reverse_cost, "components_purchase": purchase, "components_cost": components_cost,
+        "soldering_cost": soldering_cost, "firmware_cost": firmware_cost, "price": price,
         "purchase_cost": exp["plastic"], "cost": exp["total"], "profit": price - exp["total"],
         "has_purchase_price": bool(s.get("purchase_prices", {}).get(material or "")),
+        "has_print": has_print, "has_electronics": has_electronics,
     }
+
+
+def calc_order(order) -> dict:
+    """Расчёт по строке заказа из базы (компоненты — из order_components)."""
+    return calc_price(
+        order["material"], order["weight_g"] or 0, order["print_hours"] or 0, order["qty"] or 1,
+        bool(order["reverse_engineering"]), order["defect_percent"] or 0,
+        has_print=bool(order["has_print"]), has_electronics=bool(order["has_electronics"]),
+        components=db.list_components(order["id"]), markup=order["components_markup"] or 0,
+        soldering=order["soldering_price"] or 0, firmware=order["firmware_price"] or 0,
+    )
 
 
 def defect_line(defect_percent: float, defect_cost: float) -> str:
@@ -171,9 +191,7 @@ def price_breakdown(material, weight_g, hours, qty, reverse: bool = False) -> st
 
 
 def recalc_order_price(oid: int) -> None:
-    o = db.get_order(oid)
-    p = calc_price(o["material"], o["weight_g"], o["print_hours"], o["qty"], bool(o["reverse_engineering"]),
-                   o["defect_percent"] or 0)
+    p = calc_order(db.get_order(oid))
     db.update_order(oid, cost=round(p["cost"], 2), price=p["price"])
 
 
