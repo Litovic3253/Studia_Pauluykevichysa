@@ -1,7 +1,7 @@
 """PDF для клиента: детали заказа, итоговая сумма и из чего она складывается.
 
 Файл кладётся в «PDF для клиентов» рядом с программой — его можно сразу отправить заказчику.
-Внутренние цифры (закупка пластика, себестоимость, прибыль) в документ не попадают."""
+Внутренние цифры (закупка пластика и компонентов, наценка, себестоимость, прибыль) в документ не попадают."""
 import os
 import re
 import sys
@@ -64,8 +64,7 @@ def price_lines(order) -> list[tuple[str, str, float]]:
     qty = order["qty"] or 1
     weight, hours = order["weight_g"] or 0, order["print_hours"] or 0
     defect = order["defect_percent"] or 0
-    reverse = bool(order["reverse_engineering"])
-    calc = pricing.calc_price(order["material"], weight, hours, qty, reverse, defect)
+    calc = pricing.calc_order(order)
     per_gram = s["materials"].get(order["material"] or "", 0)
     cur = s["currency"]
 
@@ -82,6 +81,18 @@ def price_lines(order) -> list[tuple[str, str, float]]:
                       calc["defect_cost"]))
     if calc["reverse_cost"]:
         lines.append(("Реверс-моделирование", "создание 3D-модели по образцу", calc["reverse_cost"]))
+    if calc["has_electronics"]:
+        # Каждый компонент — по цене для клиента (закупка с наценкой); сама закупка и % не показываются.
+        factor = 1 + (order["components_markup"] or 0) / 100
+        for part in db.list_components(order["id"]):
+            value = (part["qty"] or 0) * (part["unit_cost"] or 0) * factor
+            if value:
+                lines.append((part["name"], f"{pricing.fmt_number(part['qty'])} шт × "
+                                            f"{_rate(part['unit_cost'] * factor)} {cur}", value))
+        if calc["soldering_cost"]:
+            lines.append(("Пайка и сборка", "сборка и пайка устройства", calc["soldering_cost"]))
+        if calc["firmware_cost"]:
+            lines.append(("Программирование (прошивка)", "написание и загрузка прошивки", calc["firmware_cost"]))
 
     total = round(order["price"] or 0)
     rounded = [(name, how, round(value)) for name, how, value in lines]
@@ -94,6 +105,30 @@ def price_lines(order) -> list[tuple[str, str, float]]:
         name, how, value = rounded[i]
         rounded[i] = (name, how, value + diff)
     return rounded
+
+
+def detail_rows(order) -> list[tuple[str, str]]:
+    """«Детали заказа»: строки печати — только если она есть, электроника — списком компонентов."""
+    qty = order["qty"] or 1
+    rows = [("Клиент", order["client"]), ("Контакт", order["contact"]), ("Описание", order["description"])]
+    if order["has_print"]:
+        weight = f"{pricing.fmt_number(order['weight_g'])} г" + (" за 1 шт" if qty > 1 else "")
+        hours = pricing.fmt_hours(order["print_hours"]) + (" за 1 шт" if qty > 1 else "")
+        defect = order["defect_percent"] or 0
+        rows += [
+            ("Материал", order["material"]),
+            ("Цвет", order["color"]),
+            ("Вес", weight if order["weight_g"] else ""),
+            ("Время печати", hours if order["print_hours"] else ""),
+            ("Количество", f"{qty} шт"),
+            ("Брак", f"{pricing.fmt_number(defect)}% от стоимости печати" if defect else "не учитывается"),
+        ]
+    if order["has_electronics"]:
+        parts = [p["name"] + (f" × {pricing.fmt_number(p['qty'])}" if p["qty"] != 1 else "")
+                 for p in db.list_components(order["id"])]
+        rows.append(("Электроника", ", ".join(parts)))
+    rows.append(("Срок", pricing.fmt_date(order["deadline"]) if order["deadline"] else "по договорённости"))
+    return rows
 
 
 class _Doc(FPDF):
@@ -109,7 +144,6 @@ def build_order_pdf(order_id: int, folder: Path | None = None) -> Path:
     order = db.get_order(order_id)
     if not order:
         raise ValueError(f"Заказа #{order_id} нет")
-    qty = order["qty"] or 1
 
     pdf = _Doc(format="A4")
     pdf.set_margins(18, 18, 18)
@@ -136,22 +170,7 @@ def build_order_pdf(order_id: int, folder: Path | None = None) -> Path:
     pdf.ln(6)
 
     _heading(pdf, "Детали заказа")
-    weight = f"{pricing.fmt_number(order['weight_g'])} г" + (" за 1 шт" if qty > 1 else "")
-    hours = pricing.fmt_hours(order["print_hours"]) + (" за 1 шт" if qty > 1 else "")
-    defect = order["defect_percent"] or 0
-    details = [
-        ("Клиент", order["client"]),
-        ("Контакт", order["contact"]),
-        ("Описание", order["description"]),
-        ("Материал", order["material"]),
-        ("Цвет", order["color"]),
-        ("Вес", weight if order["weight_g"] else ""),
-        ("Время печати", hours if order["print_hours"] else ""),
-        ("Количество", f"{qty} шт"),
-        ("Брак", f"{pricing.fmt_number(defect)}% от стоимости печати" if defect else "не учитывается"),
-        ("Срок", pricing.fmt_date(order["deadline"]) if order["deadline"] else "по договорённости"),
-    ]
-    for label, value in details:
+    for label, value in detail_rows(order):
         _detail_row(pdf, label, value or "—", width)
     pdf.ln(5)
 

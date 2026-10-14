@@ -115,3 +115,52 @@ def test_prepayment_due_zero_when_paid_prepaid_or_disabled(temp_db):
     assert client_pdf.prepayment_due(db.get_order(_order(price=1000))) == 0
     db.set_setting("prepayment_percent", 30)
     assert client_pdf.prepayment_due(db.get_order(_order(price=1000))) == 300
+
+
+def _electronics_order(price=None, **extra) -> int:
+    oid = db.add_order({"client": "Пётр", "contact": "", "description": "Лампа", "material": "PLA",
+                        "weight_g": 50, "print_hours": 1, "qty": 1, "cost": 0, "price": 0,
+                        "has_electronics": 1, "components_markup": 20, "soldering_price": 500,
+                        "firmware_price": 1500, **extra})
+    db.set_components(oid, [{"name": "ESP32-WROOM", "qty": 2, "unit_cost": 450},
+                            {"name": "Лента WS2812", "qty": 1, "unit_cost": 333}])
+    pricing.recalc_order_price(oid)
+    if price is not None:
+        db.update_order(oid, price=price)
+    return oid
+
+
+def test_price_lines_list_each_component_and_work(temp_db):
+    _setup()
+    oid = _electronics_order()
+    lines = client_pdf.price_lines(db.get_order(oid))
+    names = [n for n, _, _ in lines]
+    assert names == ["Материал", "Время печати", "ESP32-WROOM", "Лента WS2812", "Пайка и сборка",
+                     "Программирование (прошивка)"]
+    esp = lines[2]
+    assert esp[1] == "2 шт × 540 ₽" and esp[2] == 1080
+    assert sum(v for _, _, v in lines) == round(db.get_order(oid)["price"])
+
+
+def test_electronics_pdf_hides_purchase_and_markup(temp_db):
+    _setup()
+    oid = _electronics_order()
+    text = " ".join(f"{n} {how}" for n, how, _ in client_pdf.price_lines(db.get_order(oid))).lower()
+    assert "450" not in text and "наценк" not in text and "закуп" not in text
+
+
+def test_electronics_only_details_skip_print_rows(temp_db, tmp_path):
+    _setup()
+    oid = _electronics_order(has_print=0)
+    pricing.recalc_order_price(oid)
+    labels = [label for label, _ in client_pdf.detail_rows(db.get_order(oid))]
+    assert "Материал" not in labels and "Вес" not in labels and "Количество" not in labels
+    assert ("Электроника", "ESP32-WROOM × 2, Лента WS2812") in client_pdf.detail_rows(db.get_order(oid))
+    assert client_pdf.build_order_pdf(oid, tmp_path).read_bytes().startswith(b"%PDF")
+
+
+def test_electronics_manual_price_gets_discount_row(temp_db):
+    _setup()
+    oid = _electronics_order(price=3000)
+    lines = client_pdf.price_lines(db.get_order(oid))
+    assert lines[-1][0] == "Скидка" and sum(v for _, _, v in lines) == 3000
