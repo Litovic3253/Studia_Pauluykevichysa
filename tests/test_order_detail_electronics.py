@@ -76,3 +76,23 @@ def test_commit_keeps_row_controls_so_focus_stays(temp_db, monkeypatch):
     db.set_components(oid, [{"name": "Экран", "qty": 1, "unit_cost": 700}])  # поменяли с другого компьютера
     screen.refresh()
     assert [r.name.value for r in screen.components_editor.rows] == ["Экран"]
+
+
+def test_enabling_electronics_on_old_order_uses_default_markup(temp_db, monkeypatch):
+    """Старый заказ (только печать, наценка 0) — при включении электроники подставляется наценка из «Цен»."""
+    db.set_setting("components_markup", 25)
+    screen, oid = _screen(monkeypatch)
+    screen.electronics_switch.value = True
+    screen._on_parts_change(None)
+    assert db.get_order(oid)["components_markup"] == 25 and screen.markup_field.value == "25"
+
+
+def test_unchanged_commit_keeps_component_rows_and_catalog_price(temp_db, monkeypatch):
+    """Повторный уход из поля без изменений не переписывает компоненты — подсказка цены не «стареет»."""
+    screen, old = _screen(monkeypatch, has_electronics=1)
+    db.set_components(old, [{"name": "ESP32", "qty": 1, "unit_cost": 400}])
+    new = db.add_order({"client": "К", "contact": "", "cost": 0, "price": 0, "has_electronics": 1})
+    db.set_components(new, [{"name": "ESP32", "qty": 1, "unit_cost": 450}])
+    screen.refresh()
+    screen._on_electronics_commit()
+    assert db.component_catalog() == {"ESP32": 450}

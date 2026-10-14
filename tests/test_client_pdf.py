@@ -164,3 +164,15 @@ def test_electronics_manual_price_gets_discount_row(temp_db):
     oid = _electronics_order(price=3000)
     lines = client_pdf.price_lines(db.get_order(oid))
     assert lines[-1][0] == "Скидка" and sum(v for _, _, v in lines) == 3000
+
+
+def test_many_cheap_components_never_get_negative_or_far_off_lines(temp_db):
+    """10 резисторов по 1,4 ₽ с наценкой 20%: каждая строка ≈ 1,68 ₽ — ни минусов, ни строк, уехавших на рубль."""
+    _setup()
+    oid = db.add_order({"client": "К", "contact": "", "cost": 0, "price": 0, "has_print": 0,
+                        "has_electronics": 1, "components_markup": 20})
+    db.set_components(oid, [{"name": f"Резистор {i}", "qty": 1, "unit_cost": 1.4} for i in range(10)])
+    pricing.recalc_order_price(oid)
+    lines = client_pdf.price_lines(db.get_order(oid))
+    assert sum(v for _, _, v in lines) == round(db.get_order(oid)["price"])
+    assert all(abs(v - 1.68) < 1 for _, _, v in lines)

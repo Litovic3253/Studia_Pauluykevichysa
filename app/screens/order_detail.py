@@ -227,8 +227,14 @@ class OrderDetailScreen(ft.Column):
                 self.page.open(ft.SnackBar(ft.Text("В заказе должна остаться печать или электроника.")))
             self.refresh()
             return
-        db.update_order(self.order_id, has_print=1 if self.print_switch.value else 0,
-                        has_electronics=1 if self.electronics_switch.value else 0)
+        order = db.get_order(self.order_id)
+        fields = {"has_print": 1 if self.print_switch.value else 0,
+                  "has_electronics": 1 if self.electronics_switch.value else 0}
+        if (fields["has_electronics"] and not order["has_electronics"] and not order["components_markup"]
+                and not db.list_components(self.order_id)):
+            # Электронику впервые добавили в заказ (старый или «только печать») — наценка из «Цен», а не 0%.
+            fields["components_markup"] = db.get_settings()["components_markup"]
+        db.update_order(self.order_id, **fields)
         pricing.recalc_order_price(self.order_id)
         self.refresh()
 
@@ -245,7 +251,12 @@ class OrderDetailScreen(ft.Column):
         if components is None or None in values.values():
             self.update()
             return
-        db.set_components(self.order_id, components)
+        saved = [{"name": r["name"], "qty": r["qty"], "unit_cost": r["unit_cost"]}
+                 for r in db.list_components(self.order_id)]
+        if components != saved:
+            # Переписываем только при изменениях: иначе строки получают новые id, и «последняя цена»
+            # в подсказках компонентов становится ценой из этого (возможно, старого) заказа.
+            db.set_components(self.order_id, components)
         db.update_order(self.order_id, **values)
         pricing.recalc_order_price(self.order_id)
         self.refresh()

@@ -2,6 +2,7 @@
 
 Файл кладётся в «PDF для клиентов» рядом с программой — его можно сразу отправить заказчику.
 Внутренние цифры (закупка пластика и компонентов, наценка, себестоимость, прибыль) в документ не попадают."""
+import math
 import os
 import re
 import sys
@@ -101,9 +102,18 @@ def price_lines(order) -> list[tuple[str, str, float]]:
         if diff:
             rounded.append(("Скидка" if diff < 0 else "Корректировка цены", "итоговая цена согласована вручную", diff))
     elif diff:
-        i = max(range(len(rounded)), key=lambda k: rounded[k][2])
-        name, how, value = rounded[i]
-        rounded[i] = (name, how, value + diff)
+        # Расхождение округления — методом наибольших остатков: каждая строка отличается от точной суммы
+        # меньше чем на рубль и не уходит в минус (много дешёвых компонентов не сваливаются в одну строку).
+        floors = [math.floor(value) for _, _, value in lines]
+        extra = total - sum(floors)
+        if 0 <= extra <= len(lines):
+            by_rest = sorted(range(len(lines)), key=lambda k: lines[k][2] - floors[k], reverse=True)
+            bump = set(by_rest[:extra])
+            rounded = [(name, how, floors[k] + (k in bump)) for k, (name, how, _) in enumerate(lines)]
+        else:
+            i = max(range(len(rounded)), key=lambda k: rounded[k][2])
+            name, how, value = rounded[i]
+            rounded[i] = (name, how, value + diff)
     return rounded
 
 
