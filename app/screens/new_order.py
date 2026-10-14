@@ -52,8 +52,9 @@ class NewOrderScreen(ft.Column):
         self.markup_field = theme.field("Наценка на компоненты", third, suffix_text="%",
                                         value=pricing.fmt_number(settings["components_markup"]),
                                         on_change=self._recalc)
-        self.soldering_field = theme.field("Пайка и сборка", third, suffix_text="₽", on_change=self._recalc)
-        self.firmware_field = theme.field("Программирование (прошивка)", third, suffix_text="₽",
+        self.soldering_field = theme.field("Пайка и сборка", third, suffix_text="₽", helper_text="сумма за работу",
+                                           on_change=self._recalc)
+        self.firmware_field = theme.field("Программирование", third, suffix_text="₽", helper_text="прошивка",
                                           on_change=self._recalc)
         self.print_body = ft.Column([
             theme.grid([self.material_dd, self.color_field, self.weight_field, self.hours_field,

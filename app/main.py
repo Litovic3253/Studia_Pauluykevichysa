@@ -202,7 +202,7 @@ def main(page: ft.Page) -> None:
         return ft.Container(
             ft.Row([logo, ft.Column([ft.Text("Студия", size=16, font_family=theme.FONT_FAMILY_MEDIUM),
                                      ft.Text("Паулюкевичуса", size=12, font_family=theme.FONT_FAMILY_MEDIUM),
-                                     ft.Text("заказы 3D-печати", size=10, color=ft.Colors.ON_SURFACE_VARIANT)],
+                                     ft.Text("печать и электроника", size=10, color=ft.Colors.ON_SURFACE_VARIANT)],
                                     spacing=0, tight=True)], spacing=12),
             padding=ft.padding.only(left=4, bottom=16),
         )
