@@ -1,4 +1,4 @@
-"""Экран карточки заказа: слева клиент и параметры печати, справа статус, расчёт цены и вложения
+"""Экран карточки заказа: слева клиент, печать и электроника, справа статус, расчёт цены и вложения
 (на узком окне — одной колонкой)."""
 import shutil
 from pathlib import Path
@@ -10,6 +10,7 @@ import db
 import pricing
 from paths import DATA_DIR
 from app import client_pdf, input_hints, plastics, price_view, theme
+from app.components_editor import ComponentsEditor
 from app.dialogs import grams_dialog
 
 LOCAL_STORAGE = DATA_DIR / "files_storage"
@@ -58,10 +59,10 @@ class OrderDetailScreen(ft.Column):
         self.hours_field = input_hints.hours_field(
             on_blur=self._on_price_fields_blur, on_pick=lambda: self._on_price_fields_blur(None), col=half,
         )
-        self.qty_field = theme.field("Кол-во, шт", third, on_blur=self._on_price_fields_blur)
-        self.defect_field = theme.field("Брак, %", third, helper_text="от цены печати",
+        self.qty_field = theme.field("Кол-во, шт", half, on_blur=self._on_price_fields_blur)
+        self.defect_field = theme.field("Брак, %", half, helper_text="от цены печати",
                                         on_blur=self._on_price_fields_blur)
-        self.deadline_field = input_hints.date_field("Срок", col=third, hint_text="дд.мм.гггг",
+        self.deadline_field = input_hints.date_field("Срок", col=half, hint_text="дд.мм.гггг",
                                                      helper_text="или «завтра»", on_blur=self._on_deadline_blur,
                                                      on_pick=lambda: self._on_deadline_blur(None))
         self.notes_field = theme.field("Заметки", {"xs": 12}, multiline=True, min_lines=2,
@@ -73,19 +74,39 @@ class OrderDetailScreen(ft.Column):
         self.manual_price_note = ft.Text("", size=12, color=theme.WARN, visible=False)
         self.attachments_column = ft.Column(spacing=4)
         self.usage_row = ft.Row(spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER)
+        self.print_switch = ft.Switch(on_change=self._on_parts_change, tooltip=theme.tip("В заказе есть 3D-печать"))
+        self.electronics_switch = ft.Switch(on_change=self._on_parts_change,
+                                            tooltip=theme.tip("В заказе есть электроника"))
+        self.components_editor = ComponentsEditor(on_change=self._on_electronics_commit, live=False)
+        self.markup_field = theme.field("Наценка на компоненты", third, suffix_text="%",
+                                        on_blur=self._on_electronics_commit)
+        self.soldering_field = theme.field("Пайка и сборка", third, suffix_text="₽",
+                                           on_blur=self._on_electronics_commit)
+        self.firmware_field = theme.field("Программирование (прошивка)", third, suffix_text="₽",
+                                          on_blur=self._on_electronics_commit)
+        self.print_body = ft.Column([theme.grid([
+            self.material_field, self.color_field, self.weight_field, self.hours_field,
+            self.qty_field, self.defect_field,
+        ]), ft.Divider(height=4), self.usage_row], spacing=14)
+        self.electronics_body = ft.Column([
+            ft.Text("На весь заказ: «Кол-во, шт» умножает только печать.", size=12,
+                    color=ft.Colors.ON_SURFACE_VARIANT),
+            self.components_editor,
+            theme.grid([self.markup_field, self.soldering_field, self.firmware_field]),
+        ], spacing=14)
 
         self.file_picker = ft.FilePicker(on_result=self._on_file_picked)
         self.status_banner = ft.Text("", color=theme.ERR, visible=False)
         self.header = ft.Container()
 
         left = ft.Column([
-            theme.section("Клиент", [theme.grid([self.client_field, self.contact_field,
-                                                 theme.in_col(self.customer_dd, {"xs": 12})])],
+            theme.section("Клиент", [theme.grid([self.client_field, self.contact_field, self.deadline_field,
+                                                 theme.in_col(self.customer_dd, half), self.notes_field])],
                           icon=ft.Icons.PERSON_OUTLINE),
-            theme.section("Печать", [theme.grid([
-                self.material_field, self.color_field, self.weight_field, self.hours_field,
-                self.qty_field, self.defect_field, self.deadline_field, self.notes_field,
-            ]), ft.Divider(height=4), self.usage_row], icon=ft.Icons.PRECISION_MANUFACTURING),
+            theme.section("Печать", [self.print_body], icon=ft.Icons.PRECISION_MANUFACTURING,
+                          actions=[self.print_switch]),
+            theme.section("Электроника", [self.electronics_body], icon=ft.Icons.MEMORY,
+                          actions=[self.electronics_switch]),
         ], spacing=theme.SPACING, col={"xs": 12, "lg": 7})
 
         right = ft.Column([
@@ -159,14 +180,23 @@ class OrderDetailScreen(ft.Column):
             self.notes_field.value = order["notes"] or ""
             self.prepayment_field.value = pricing.fmt_number(order["prepayment"]) if order["prepayment"] else ""
             self.prepayment_field.error_text = None
+            self.components_editor.sync(db.list_components(self.order_id))
+            self.markup_field.value = pricing.fmt_number(order["components_markup"])
+            self.soldering_field.value = pricing.fmt_number(order["soldering_price"]) if order["soldering_price"] else ""
+            self.firmware_field.value = pricing.fmt_number(order["firmware_price"]) if order["firmware_price"] else ""
+            for f in (self.markup_field, self.soldering_field, self.firmware_field):
+                f.error_text = None
 
         # Dropdown/Switch коммитятся сразу через on_change, поэтому их можно
         # безопасно обновлять и во время live-sync.
         self.status_dd.value = order["status"]
         self.paid_switch.value = bool(order["paid"])
+        self.print_switch.value = bool(order["has_print"])
+        self.electronics_switch.value = bool(order["has_electronics"])
+        self.print_body.visible = self.print_switch.value
+        self.electronics_body.visible = self.electronics_switch.value
 
-        calc = pricing.calc_price(order["material"], order["weight_g"] or 0, order["print_hours"] or 0,
-                                  order["qty"] or 1, bool(order["reverse_engineering"]), order["defect_percent"] or 0)
+        calc = pricing.calc_order(order)
         self.breakdown_column.controls = price_view.breakdown_rows(calc, order["defect_percent"] or 0,
                                                                    total=order["price"])
         self.profit_column.controls = price_view.profit_rows(calc, order["material"], total=order["price"])
@@ -180,6 +210,7 @@ class OrderDetailScreen(ft.Column):
         self.customer_dd.value = str(order["customer_id"]) if order["customer_id"] else None
 
         self._render_usage(order)
+        self.usage_row.visible = bool(order["has_print"])
 
         self.attachments_column.controls = [self._attachment_row(a) for a in db.list_attachments(self.order_id)] or [
             ft.Text("Файлов пока нет.", size=13, color=ft.Colors.ON_SURFACE_VARIANT)
@@ -187,6 +218,37 @@ class OrderDetailScreen(ft.Column):
 
         if self.page:
             self.update()
+
+    # ---------- части заказа: печать / электроника ----------
+
+    def _on_parts_change(self, e: ft.ControlEvent | None) -> None:
+        if not (self.print_switch.value or self.electronics_switch.value):
+            if self.page:
+                self.page.open(ft.SnackBar(ft.Text("В заказе должна остаться печать или электроника.")))
+            self.refresh()
+            return
+        db.update_order(self.order_id, has_print=1 if self.print_switch.value else 0,
+                        has_electronics=1 if self.electronics_switch.value else 0)
+        pricing.recalc_order_price(self.order_id)
+        self.refresh()
+
+    def _on_electronics_commit(self, e: ft.ControlEvent | None = None) -> None:
+        """Компоненты, наценка, пайка, прошивка — сохраняются вместе, цена пересчитывается."""
+        components = self.components_editor.get_components()
+        values = {}
+        for f, key in ((self.markup_field, "components_markup"), (self.soldering_field, "soldering_price"),
+                       (self.firmware_field, "firmware_price")):
+            text = (f.value or "").strip()
+            value = pricing.parse_number(text) if text else 0
+            f.error_text = None if value is not None else "Число"
+            values[key] = value
+        if components is None or None in values.values():
+            self.update()
+            return
+        db.set_components(self.order_id, components)
+        db.update_order(self.order_id, **values)
+        pricing.recalc_order_price(self.order_id)
+        self.refresh()
 
     # ---------- списание пластика ----------
 

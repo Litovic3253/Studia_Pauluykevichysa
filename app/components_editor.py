@@ -111,6 +111,18 @@ class ComponentsEditor(ft.Column):
         self.rows = [_Row(self, r["name"], r["qty"], r["unit_cost"]) for r in rows]
         self._render()
 
+    def sync(self, rows: Iterable[Mapping]) -> None:
+        """Как set_components, но строки на экране не трогает, если в них уже то же самое: после
+        сохранения поля не пересоздаются, и курсор остаётся там, куда перешли."""
+        def key(items) -> list[tuple]:
+            return [(r["name"], float(r["qty"]), float(r["unit_cost"])) for r in items]
+
+        rows = list(rows)
+        if key(rows) != key(self.preview()):
+            self.set_components(rows)
+        else:
+            self.load_catalog()  # только что сохранённые компоненты — сразу в подсказках
+
     def add_row(self, name: str = "", qty: float = 1, unit_cost: float | None = None) -> None:
         self.rows.append(_Row(self, name, qty, unit_cost))
         self._render()
