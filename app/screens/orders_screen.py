@@ -30,6 +30,21 @@ def deadline_view(order) -> ft.Control:
     ], spacing=0, tight=True)
 
 
+def order_parts(order, components) -> tuple[list[str], str]:
+    """Иконки частей заказа (печать / электроника) и подзаголовок: описание, материал печати
+    или первые компоненты электроники."""
+    icons = []
+    parts = [order["description"]]
+    if order["has_print"]:
+        icons.append(ft.Icons.PRECISION_MANUFACTURING)
+        parts.append(order["material"])
+    if order["has_electronics"]:
+        icons.append(ft.Icons.MEMORY)
+        names = [c["name"] for c in components]
+        parts.append(", ".join(names[:2]) + ("…" if len(names) > 2 else "") if names else "электроника")
+    return icons, " · ".join(p for p in parts if p)
+
+
 class OrdersScreen(ft.Column):
     def __init__(self, on_open_order: Callable[[int], None], on_new_order: Callable[[], None] | None = None):
         super().__init__(expand=True, spacing=theme.SPACING)
@@ -43,7 +58,7 @@ class OrdersScreen(ft.Column):
             selected={self.kind}, show_selected_icon=False, on_change=self._on_filter_change,
         )
         self.search_field = ft.TextField(
-            hint_text="Поиск: клиент, контакт, описание", prefix_icon=ft.Icons.SEARCH,
+            hint_text="Поиск: клиент, контакт, описание, компонент", prefix_icon=ft.Icons.SEARCH,
             border_radius=theme.FIELD_RADIUS, dense=True, on_change=self._on_search_change, **theme.FIELD_BORDER,
             col={"xs": 12, "lg": 5},
         )
@@ -88,16 +103,22 @@ class OrdersScreen(ft.Column):
         text = self.search_text.strip()
         orders = db.search_orders(text) if text else db.list_orders(self.kind, limit=200)
         if orders:
-            self.list_view.controls = [self._order_row(o) for o in orders]
+            components = db.components_by_order()
+            self.list_view.controls = [self._order_row(o, components.get(o["id"], [])) for o in orders]
         else:
             message = "Ничего не найдено." if text else "Заказов нет."
             self.list_view.controls = [theme.empty_state(message, ft.Icons.RECEIPT_LONG)]
 
-    def _order_row(self, o) -> ft.Control:
-        title = ft.Text(f"#{o['id']}  {o['client']}", size=15, weight=ft.FontWeight.W_600,
-                        max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
-        subtitle_parts = [p for p in [o["description"], o["material"]] if p]
-        subtitle = ft.Text(" · ".join(subtitle_parts) or "без описания", size=12,
+    def _order_row(self, o, components) -> ft.Control:
+        icons, subtitle_text = order_parts(o, components)
+        title = ft.Row([
+            ft.Text(f"#{o['id']}  {o['client']}", size=15, weight=ft.FontWeight.W_600,
+                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS, expand=True, expand_loose=True),
+            *[ft.Icon(i, size=15, color=ft.Colors.ON_SURFACE_VARIANT,
+                      tooltip=theme.tip("Печать" if i == ft.Icons.PRECISION_MANUFACTURING else "Электроника"))
+              for i in icons],
+        ], spacing=6)
+        subtitle = ft.Text(subtitle_text or "без описания", size=12,
                            color=ft.Colors.ON_SURFACE_VARIANT, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS)
         price = ft.Column([
             ft.Text(pricing.money(o["price"]), size=15, weight=ft.FontWeight.W_700),

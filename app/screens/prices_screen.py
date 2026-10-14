@@ -1,4 +1,5 @@
-"""Экран «Цены»: пластик (закупка → цена для клиента) и настройки расчёта (ставка часа, реверс, брак, валюта)."""
+"""Экран «Цены»: пластик (закупка → цена для клиента) и настройки расчёта (ставка часа, реверс, брак,
+наценка на компоненты электроники, валюта)."""
 import flet as ft
 
 import db
@@ -26,6 +27,10 @@ class PricesScreen(ft.Column):
         self.defect_field = theme.field(
             "Процент брака по умолчанию", {"xs": 12, "sm": 6}, suffix_text="%", on_blur=self._save_scalars,
             helper_text="Подставляется в новые заказы",
+        )
+        self.components_markup_field = theme.field(
+            "Наценка на компоненты", {"xs": 12, "sm": 6}, suffix_text="%", on_blur=self._save_scalars,
+            helper_text="Электроника: к закупке компонентов; подставляется в новые заказы",
         )
         self.currency_field = theme.field("Валюта", {"xs": 12, "sm": 6}, on_blur=self._save_scalars)
         self.prepayment_percent_field = theme.field(
@@ -63,20 +68,21 @@ class PricesScreen(ft.Column):
         ], icon=ft.Icons.INVENTORY_2_OUTLINED, col={"xs": 12, "lg": 7})
 
         settings = theme.section("Расчёт цены", [
-            theme.grid([self.hour_rate_field, self.reverse_price_field, self.defect_field, self.currency_field,
+            theme.grid([self.hour_rate_field, self.reverse_price_field, self.defect_field,
+                        self.components_markup_field, self.currency_field,
                         self.prepayment_percent_field, self.signer_field, self.payment_field]),
             ft.Text("Изменения сохраняются, когда вы уходите из поля. Цены уже созданных заказов не меняются, "
                     "а их себестоимость и прибыль пересчитываются по новой закупке.",
                     size=12, color=ft.Colors.ON_SURFACE_VARIANT),
             ft.Divider(height=8),
             ft.Text("Как считается прибыль", size=13, weight=ft.FontWeight.W_600),
-            ft.Text("Прибыль = цена заказа − пластик по закупке. "
-                    "Часы печати, наценка на пластик, брак, реверс-моделирование и ручная цена — всё это прибыль.",
+            ft.Text("Прибыль = цена заказа − пластик и компоненты по закупке. Часы печати, наценки, брак, "
+                    "реверс-моделирование, пайка, прошивка и ручная цена — всё это прибыль.",
                     size=12, color=ft.Colors.ON_SURFACE_VARIANT),
         ], icon=ft.Icons.TUNE, col={"xs": 12, "lg": 5})
 
         self.controls = [
-            theme.page_header("Цены", "Закупка пластика, цены для клиента и параметры расчёта"),
+            theme.page_header("Цены", "Закупка пластика, наценка на компоненты и параметры расчёта"),
             self.status_row,
             theme.grid([materials, settings]),
         ]
@@ -95,6 +101,7 @@ class PricesScreen(ft.Column):
         self.hour_rate_field.value = pricing.fmt_number(settings["hour_rate"])
         self.reverse_price_field.value = pricing.fmt_number(settings["reverse_price"])
         self.defect_field.value = pricing.fmt_number(settings["defect_percent"])
+        self.components_markup_field.value = pricing.fmt_number(settings["components_markup"])
         self.currency_field.value = settings["currency"]
         self.payment_field.value = settings["payment_text"]
         self.prepayment_percent_field.value = pricing.fmt_number(settings["prepayment_percent"])
@@ -198,6 +205,9 @@ class PricesScreen(ft.Column):
         defect = pricing.parse_number(self.defect_field.value)
         if defect is not None:
             db.set_setting("defect_percent", defect)
+        markup = pricing.parse_number(self.components_markup_field.value)
+        if markup is not None:
+            db.set_setting("components_markup", markup)
         if self.currency_field.value:
             db.set_setting("currency", self.currency_field.value.strip())
         db.set_setting("payment_text", (self.payment_field.value or "").strip())

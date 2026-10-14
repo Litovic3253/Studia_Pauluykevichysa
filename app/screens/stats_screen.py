@@ -323,7 +323,7 @@ class StatsScreen(ft.Column):
             self._muted(f"маржа {margin:.0f}%"),
             self._spacer(),
             self._row([self._label("оплачено", True)], pricing.money(paid_revenue), strong=True),
-            self._row([self._label("пластик по закупке")], f"−{pricing.money(s['expense'])}"),
+            self._row([self._label("закупка: пластик + компоненты")], f"−{pricing.money(s['expense'])}"),
             theme.thin_bar(margin / 100, theme.OK),
         ]
         return None, body

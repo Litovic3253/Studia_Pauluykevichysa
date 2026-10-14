@@ -1,4 +1,4 @@
-"""Точка входа «Студии Паулюкевичуса» — локальной панели управления заказами 3D-печати."""
+"""Точка входа «Студии Паулюкевичуса» — локальной панели управления заказами: 3D-печать и электроника."""
 import sys
 from pathlib import Path
 
@@ -80,7 +80,7 @@ def main(page: ft.Page) -> None:
     theme.apply_theme(page, current_theme_mode)
 
     # Экран загрузки — первым делом, пока создаются экраны и подтягиваются данные.
-    splash = Splash(APP_NAME, "заказы 3D-печати")
+    splash = Splash(APP_NAME, "заказы: печать и электроника")
     page.add(splash)
     splash.start()
     splash.step(12, "Загружаю заказы…")
