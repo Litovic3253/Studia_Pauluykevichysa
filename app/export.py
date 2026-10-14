@@ -6,7 +6,8 @@ import db
 
 ORDER_COLUMNS = [
     "ID", "Клиент", "Контакт", "Описание", "Материал", "Цвет", "Вес, г",
-    "Часы печати", "Кол-во", "Брак, %", "Срок", "Статус", "Оплачен", "Предоплата", "Себестоимость",
+    "Часы печати", "Кол-во", "Брак, %", "Срок", "Статус", "Оплачен", "Предоплата",
+    "Электроника", "Компоненты (закупка)", "Пайка", "Прошивка", "Себестоимость",
     "Цена", "Прибыль", "Заметки", "Создан",
 ]
 
@@ -15,7 +16,9 @@ CUSTOMER_COLUMNS = ["ID", "Имя", "Контакт", "Заметки", "Зак�
 
 def build_orders_sheet() -> list[list[Any]]:
     rows: list[list[Any]] = [ORDER_COLUMNS]
+    components = db.components_by_order()
     for o in db.list_orders_all():
+        electronics = bool(o["has_electronics"])
         rows.append([
             o["id"],
             o["client"],
@@ -31,6 +34,10 @@ def build_orders_sheet() -> list[list[Any]]:
             db.STATUSES.get(o["status"], o["status"]),
             "Да" if o["paid"] else "Нет",
             o["prepayment"] or 0,
+            "Да" if electronics else "Нет",
+            round(sum(c["qty"] * c["unit_cost"] for c in components.get(o["id"], [])), 2) if electronics else 0,
+            (o["soldering_price"] or 0) if electronics else 0,
+            (o["firmware_price"] or 0) if electronics else 0,
             o["cost"] or 0,
             o["price"] or 0,
             round((o["price"] or 0) - (o["cost"] or 0), 2),
@@ -67,6 +74,7 @@ def build_prices_sheet() -> list[list[Any]]:
     rows.append(["Параметр", "Значение"])
     rows.append(["Ставка часа печати", settings["hour_rate"]])
     rows.append(["Реверс-моделирование", settings["reverse_price"]])
+    rows.append(["Наценка на компоненты, %", settings["components_markup"]])
     rows.append(["Валюта", settings["currency"]])
     return rows
 

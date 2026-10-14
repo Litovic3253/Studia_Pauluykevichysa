@@ -105,3 +105,21 @@ def test_sidebar_selects_item_and_reports_change():
     assert clicked == ["x"]
     bar.set_layout(False, None, [])
     assert bar.width == 72 and bar.content.controls[0].tooltip.message == "Один"
+
+
+def test_report_counts_electronics(temp_db):
+    from datetime import date
+    from app import report
+    db.set_setting("purchase_prices", {"PLA": 2})
+    oid = db.add_order({"client": "К", "contact": "", "material": "PLA", "weight_g": 100, "qty": 1,
+                        "cost": 0, "price": 5000, "has_electronics": 1, "soldering_price": 500,
+                        "firmware_price": 1500})
+    db.set_components(oid, [{"name": "ESP32", "qty": 2, "unit_cost": 450}])
+    today = date.today()
+    rows = report.report_rows(today, today)
+    r = rows[0]
+    assert (r["components"], r["soldering"], r["firmware"], r["cost"]) == (900, 500, 1500, 1100)
+    assert r["profit"] == 5000 - 1100
+    names = [c[0] for c in report.COLUMNS]
+    assert names[9] == "Цена"
+    assert names.index("Компоненты (закупка)") < names.index("Себестоимость")

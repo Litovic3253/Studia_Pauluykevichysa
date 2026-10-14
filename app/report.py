@@ -1,7 +1,8 @@
 """Смета за период (месяц, квартал или свои даты) — Excel-файл с заказами, деньгами и прибылью.
 
 Лист «Смета»: каждый заказ периода (по дате создания, отменённые не входят) — цена, предоплата,
-получено, долг, себестоимость (пластик по закупке), прибыль; внизу строка «Итого»
+получено, долг, компоненты электроники по закупке, пайка, прошивка, себестоимость (пластик + компоненты),
+прибыль; внизу строка «Итого»
 формулами Excel. Лист «Итоги»: сводка по деньгам и расход пластика по материалам."""
 import calendar
 from datetime import date
@@ -33,7 +34,10 @@ COLUMNS = [
     ("Оплачен", 9, None, False),
     ("Получено", 12, "#,##0", True),
     ("Долг", 12, "#,##0", True),
-    ("Себестоимость (пластик)", 15, "#,##0", True),
+    ("Компоненты (закупка)", 13, "#,##0", True),
+    ("Пайка", 10, "#,##0", True),
+    ("Прошивка", 11, "#,##0", True),
+    ("Себестоимость", 15, "#,##0", True),
     ("Прибыль", 12, "#,##0", True),
 ]
 
@@ -66,34 +70,40 @@ def default_file_name(start: date, end: date) -> str:
 # ---------- данные ----------
 
 def report_rows(start: date, end: date) -> list[dict]:
-    settings = db.get_settings()
     rows = []
     for o in db.orders_between(start.isoformat(), end.isoformat()):
         qty = o["qty"] or 1
-        exp = db.expense(o["material"], o["weight_g"] or 0, o["print_hours"] or 0, qty, settings)
+        calc = pricing.calc_order(o)
+        printed = bool(o["has_print"])
         price = o["price"] or 0
         prepayment = o["prepayment"] or 0
         received = price if o["paid"] else prepayment
         rows.append({
             "id": o["id"], "date": o["created_at"][:10], "client": o["client"] or "",
-            "description": o["description"] or "", "material": o["material"] or "",
-            "grams": (o["weight_g"] or 0) * qty, "hours": (o["print_hours"] or 0) * qty, "qty": qty,
+            "description": o["description"] or "", "material": (o["material"] or "") if printed else "",
+            "grams": (o["weight_g"] or 0) * qty if printed else 0,
+            "hours": (o["print_hours"] or 0) * qty if printed else 0, "qty": qty,
             "status": db.STATUSES.get(o["status"], o["status"]).split(" ", 1)[-1],
             "price": price, "prepayment": prepayment, "paid": bool(o["paid"]),
             "received": received, "debt": max(price - received, 0),
-            "cost": exp["total"],
-            "profit": price - exp["total"],
+            "components": calc["components_purchase"], "soldering": calc["soldering_cost"],
+            "firmware": calc["firmware_cost"],
+            "cost": calc["cost"],
+            "profit": price - calc["cost"],
         })
     return rows
 
 
 def summary(rows: list[dict]) -> dict:
     total = {k: sum(r[k] for r in rows) for k in
-             ("price", "received", "debt", "cost", "profit", "grams", "hours")}
+             ("price", "received", "debt", "components", "soldering", "firmware", "cost", "profit",
+              "grams", "hours")}
     total["orders"] = len(rows)
     total["margin"] = total["profit"] / total["price"] if total["price"] else 0
     by_material: dict[str, float] = {}
     for r in rows:
+        if not r["grams"]:
+            continue  # электроника без печати — не расход пластика
         by_material[r["material"] or "—"] = by_material.get(r["material"] or "—", 0) + r["grams"]
     total["by_material"] = sorted(by_material.items(), key=lambda kv: -kv[1])
     return total
@@ -140,7 +150,7 @@ def write_report(path: str | Path, start: date, end: date) -> Path:
     ws.row_dimensions[head_row].height = 30
 
     keys = ["id", "date", "client", "description", "material", "grams", "hours", "qty", "status", "price",
-            "prepayment", "paid", "received", "debt", "cost", "profit"]
+            "prepayment", "paid", "received", "debt", "components", "soldering", "firmware", "cost", "profit"]
     for i, r in enumerate(rows):
         row = head_row + 1 + i
         for col, key in enumerate(keys, start=1):
@@ -181,7 +191,10 @@ def write_report(path: str | Path, start: date, end: date) -> Path:
         ("Сумма заказов", total["price"], "#,##0"),
         ("Получено (оплаты + предоплаты)", total["received"], "#,##0"),
         ("Ждём доплату", total["debt"], "#,##0"),
-        ("Себестоимость (пластик по закупке)", total["cost"], "#,##0"),
+        ("Компоненты по закупке", total["components"], "#,##0"),
+        ("Пайка", total["soldering"], "#,##0"),
+        ("Прошивка", total["firmware"], "#,##0"),
+        ("Себестоимость (пластик + компоненты)", total["cost"], "#,##0"),
         ("Прибыль", total["profit"], "#,##0"),
         ("Маржа", total["margin"], "0%"),
         ("Пластика израсходовано, кг", total["grams"] / 1000, "0.00"),

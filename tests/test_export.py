@@ -67,3 +67,13 @@ def test_build_orders_sheet_includes_defect_percent(temp_db):
     db.add_order({"client": "К", "contact": "", "cost": 0, "price": 0, "defect_percent": 15})
     rows = export.build_orders_sheet()
     assert rows[1][rows[0].index("Брак, %")] == 15
+
+
+def test_orders_sheet_has_electronics_columns(temp_db):
+    oid = db.add_order({"client": "К", "contact": "", "cost": 900, "price": 3000, "has_electronics": 1,
+                        "soldering_price": 500})
+    db.set_components(oid, [{"name": "ESP32", "qty": 2, "unit_cost": 450}])
+    rows = export.build_orders_sheet()
+    row = dict(zip(rows[0], rows[1]))
+    assert row["Электроника"] == "Да" and row["Компоненты (закупка)"] == 900 and row["Пайка"] == 500
+    assert row["Прошивка"] == 0
